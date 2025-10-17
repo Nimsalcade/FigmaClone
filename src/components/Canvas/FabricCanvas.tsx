@@ -131,10 +131,6 @@ export const FabricCanvas = () => {
 
     const handleWheel = (opt: fabric.IEvent<WheelEvent>) => {
       const event = opt.e;
-      if (!event.ctrlKey && !event.metaKey) {
-        return;
-      }
-
       event.preventDefault();
       event.stopPropagation();
 
