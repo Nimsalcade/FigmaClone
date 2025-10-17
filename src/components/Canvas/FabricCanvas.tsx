@@ -3,11 +3,14 @@ import { fabric } from 'fabric';
 import type { Canvas as FabricCanvasType } from 'fabric/fabric-impl';
 import {
   DEFAULT_ZOOM,
+  HISTORY_BATCH_VIEWPORT,
   MAX_ZOOM,
   MIN_ZOOM,
   type ViewportState,
+  type ViewportUpdateOptions,
   useCanvasStore,
 } from '../../store/canvasStore';
+import { useHistoryStore } from '../../store/historyStore';
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const isClose = (a: number, b: number, epsilon = 0.0001) => Math.abs(a - b) <= epsilon;
@@ -35,8 +38,12 @@ export const FabricCanvas = () => {
   const initialViewportRef = useRef<ViewportState | null>(null);
   const isDraggingRef = useRef(false);
   const shouldPanRef = useRef(false);
-  const pendingViewportRef = useRef<ViewportState | null>(null);
+  const pendingViewportRef = useRef<{
+    viewport: ViewportState;
+    options?: ViewportUpdateOptions;
+  } | null>(null);
   const rafIdRef = useRef<number | null>(null);
+  const panBatchActiveRef = useRef(false);
 
   const viewport = useCanvasStore((state) => state.viewport);
   const activeTool = useCanvasStore((state) => state.activeTool);
@@ -49,8 +56,24 @@ export const FabricCanvas = () => {
     initialViewportRef.current = viewport;
   }
 
+  const beginPanBatch = () => {
+    if (panBatchActiveRef.current) {
+      return;
+    }
+    useHistoryStore.getState().beginBatch('Pan canvas', HISTORY_BATCH_VIEWPORT);
+    panBatchActiveRef.current = true;
+  };
+
+  const finalizePanBatch = () => {
+    if (!panBatchActiveRef.current) {
+      return;
+    }
+    useHistoryStore.getState().commitBatch(HISTORY_BATCH_VIEWPORT);
+    panBatchActiveRef.current = false;
+  };
+
   const scheduleViewportUpdate = useCallback(
-    (nextViewport: ViewportState) => {
+    (nextViewport: ViewportState, options?: ViewportUpdateOptions) => {
       const current = useCanvasStore.getState().viewport;
       if (
         Math.abs(current.x - nextViewport.x) <= 0.5 &&
@@ -60,14 +83,15 @@ export const FabricCanvas = () => {
         return;
       }
 
-      pendingViewportRef.current = nextViewport;
+      pendingViewportRef.current = { viewport: nextViewport, options };
       if (rafIdRef.current !== null) {
         return;
       }
 
       rafIdRef.current = window.requestAnimationFrame(() => {
-        if (pendingViewportRef.current) {
-          setViewport(pendingViewportRef.current);
+        const pending = pendingViewportRef.current;
+        if (pending) {
+          setViewport(pending.viewport, pending.options);
           pendingViewportRef.current = null;
         }
         rafIdRef.current = null;
@@ -152,7 +176,7 @@ export const FabricCanvas = () => {
 
       const nextViewport = getViewportFromCanvas(canvas);
       if (nextViewport) {
-        scheduleViewportUpdate(nextViewport);
+        scheduleViewportUpdate(nextViewport, { label: 'Zoom canvas', batchKey: HISTORY_BATCH_VIEWPORT });
       }
 
       canvas.requestRenderAll();
@@ -163,6 +187,7 @@ export const FabricCanvas = () => {
         return;
       }
 
+      beginPanBatch();
       isDraggingRef.current = true;
       canvas.setCursor('grabbing');
       canvas.defaultCursor = 'grabbing';
@@ -178,7 +203,7 @@ export const FabricCanvas = () => {
 
       const nextViewport = getViewportFromCanvas(canvas);
       if (nextViewport) {
-        scheduleViewportUpdate(nextViewport);
+        scheduleViewportUpdate(nextViewport, { label: 'Pan canvas' });
       }
 
       canvas.requestRenderAll();
@@ -186,6 +211,7 @@ export const FabricCanvas = () => {
 
     const handleMouseUp = () => {
       if (!isDraggingRef.current) {
+        finalizePanBatch();
         return;
       }
 
@@ -196,9 +222,10 @@ export const FabricCanvas = () => {
 
       const nextViewport = getViewportFromCanvas(canvas);
       if (nextViewport) {
-        scheduleViewportUpdate(nextViewport);
+        scheduleViewportUpdate(nextViewport, { label: 'Pan canvas' });
       }
 
+      finalizePanBatch();
       canvas.requestRenderAll();
     };
 
@@ -215,13 +242,15 @@ export const FabricCanvas = () => {
       }
 
       pendingViewportRef.current = null;
+      finalizePanBatch();
+      useHistoryStore.getState().cancelBatch(HISTORY_BATCH_VIEWPORT);
 
       resizeObserver.disconnect();
-      canvas.off('mouse:wheel', handleWheel);
-      canvas.off('mouse:down', handleMouseDown);
-      canvas.off('mouse:move', handleMouseMove);
-      canvas.off('mouse:up', handleMouseUp);
-      canvas.off('mouse:out', handleMouseUp);
+      canvas.off('mouse:wheel', handleWheel as never);
+      canvas.off('mouse:down', handleMouseDown as never);
+      canvas.off('mouse:move', handleMouseMove as never);
+      canvas.off('mouse:up', handleMouseUp as never);
+      canvas.off('mouse:out', handleMouseUp as never);
       canvas.dispose();
       fabricCanvasRef.current = null;
       setFabricCanvas(null);
@@ -241,6 +270,7 @@ export const FabricCanvas = () => {
 
     if (wasDragging && !shouldPan) {
       isDraggingRef.current = false;
+      finalizePanBatch();
       canvas.setCursor('default');
       canvas.defaultCursor = 'default';
       return;
