@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import type { Canvas as FabricCanvas } from 'fabric/fabric-impl';
 
 export const MIN_ZOOM = 0.1;
 export const MAX_ZOOM = 4;
@@ -32,6 +33,7 @@ interface CanvasState {
   gridVisible: boolean;
   activeTool: Tool;
   isSpacePanning: boolean;
+  fabricCanvas: FabricCanvas | null;
   setViewport: (viewport: ViewportState) => void;
   setPan: (x: number, y: number) => void;
   setZoom: (zoom: number) => void;
@@ -45,6 +47,7 @@ interface CanvasState {
   toggleGrid: () => void;
   setActiveTool: (tool: Tool) => void;
   setSpacePanning: (active: boolean) => void;
+  setFabricCanvas: (canvas: FabricCanvas | null) => void;
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -79,6 +82,7 @@ export const useCanvasStore = create<CanvasState>()((set, get) => {
     gridVisible: true,
     activeTool: 'select',
     isSpacePanning: false,
+    fabricCanvas: null,
     setViewport: (viewport) =>
       set({
         viewport: {
@@ -169,5 +173,6 @@ export const useCanvasStore = create<CanvasState>()((set, get) => {
     toggleGrid: () => set((state) => ({ gridVisible: !state.gridVisible })),
     setActiveTool: (tool) => set({ activeTool: tool }),
     setSpacePanning: (active) => set({ isSpacePanning: active }),
+    setFabricCanvas: (canvas) => set({ fabricCanvas: canvas }),
   };
 });
