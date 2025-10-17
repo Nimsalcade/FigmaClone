@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useCanvasStore } from '../store/canvasStore';
+import { useHistoryStore } from '../store/historyStore';
 
 const isTextInput = (element: EventTarget | null) => {
   if (!(element instanceof HTMLElement)) {
@@ -16,6 +17,44 @@ const isTextInput = (element: EventTarget | null) => {
   );
 };
 
+const isUndoShortcut = (event: KeyboardEvent) => {
+  if (event.altKey) {
+    return false;
+  }
+
+  const usesMeta = event.metaKey && !event.ctrlKey;
+  const usesCtrl = event.ctrlKey;
+
+  if (!usesMeta && !usesCtrl) {
+    return false;
+  }
+
+  return event.code === 'KeyZ' && !event.shiftKey;
+};
+
+const isRedoShortcut = (event: KeyboardEvent) => {
+  if (event.altKey) {
+    return false;
+  }
+
+  const usesMeta = event.metaKey && !event.ctrlKey;
+  const usesCtrl = event.ctrlKey && !event.metaKey;
+
+  if (usesMeta) {
+    return event.code === 'KeyZ' && event.shiftKey;
+  }
+
+  if (usesCtrl) {
+    if (event.code === 'KeyY' && !event.shiftKey) {
+      return true;
+    }
+
+    return event.code === 'KeyZ' && event.shiftKey;
+  }
+
+  return false;
+};
+
 export const useCanvasKeyboardShortcuts = () => {
   const setSpacePanning = useCanvasStore((state) => state.setSpacePanning);
   const setActiveTool = useCanvasStore((state) => state.setActiveTool);
@@ -23,6 +62,30 @@ export const useCanvasKeyboardShortcuts = () => {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (isTextInput(event.target)) {
+        return;
+      }
+
+      if (isUndoShortcut(event)) {
+        event.preventDefault();
+        if (event.repeat) {
+          return;
+        }
+        const history = useHistoryStore.getState();
+        if (history.canUndo) {
+          history.undo();
+        }
+        return;
+      }
+
+      if (isRedoShortcut(event)) {
+        event.preventDefault();
+        if (event.repeat) {
+          return;
+        }
+        const history = useHistoryStore.getState();
+        if (history.canRedo) {
+          history.redo();
+        }
         return;
       }
 

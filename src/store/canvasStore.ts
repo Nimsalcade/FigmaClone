@@ -1,11 +1,15 @@
 import { create } from 'zustand';
 import type { Canvas as FabricCanvas } from 'fabric/fabric-impl';
+import { registerHistorySlice, useHistoryStore } from './historyStore';
 
 export const MIN_ZOOM = 0.1;
 export const MAX_ZOOM = 4;
 export const DEFAULT_ZOOM = 1;
 const ZOOM_IN_FACTOR = 1.1;
 const ZOOM_OUT_FACTOR = 1 / ZOOM_IN_FACTOR;
+
+export const HISTORY_BATCH_VIEWPORT = 'canvas:viewport';
+const HISTORY_BATCH_GRID = 'canvas:grid';
 
 export type Tool = 'select' | 'hand';
 
@@ -27,6 +31,17 @@ export interface ZoomToFitBounds {
   height: number;
 }
 
+export interface ViewportUpdateOptions {
+  label?: string;
+  batchKey?: string | null;
+  skipHistory?: boolean;
+}
+
+export interface CanvasHistorySnapshot {
+  viewport: ViewportState;
+  gridVisible: boolean;
+}
+
 interface CanvasState {
   viewport: ViewportState;
   canvasSize: CanvasSize;
@@ -34,7 +49,7 @@ interface CanvasState {
   activeTool: Tool;
   isSpacePanning: boolean;
   fabricCanvas: FabricCanvas | null;
-  setViewport: (viewport: ViewportState) => void;
+  setViewport: (viewport: ViewportState, options?: ViewportUpdateOptions) => void;
   setPan: (x: number, y: number) => void;
   setZoom: (zoom: number) => void;
   zoomIn: () => void;
@@ -51,6 +66,23 @@ interface CanvasState {
 }
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+const numbersClose = (a: number, b: number, epsilon = 0.0001) => Math.abs(a - b) <= epsilon;
+const viewportClose = (a: ViewportState, b: ViewportState) =>
+  Math.abs(a.x - b.x) <= 0.5 && Math.abs(a.y - b.y) <= 0.5 && numbersClose(a.zoom, b.zoom);
+
+const cloneViewport = (viewport: ViewportState): ViewportState => ({
+  x: viewport.x,
+  y: viewport.y,
+  zoom: viewport.zoom,
+});
+
+const prepareHistory = () => {
+  const history = useHistoryStore.getState();
+  if (!history.initialized) {
+    history.initialize('Initial canvas state');
+  }
+  return history;
+};
 
 const DEFAULT_VIEWPORT: ViewportState = {
   x: 0,
@@ -59,12 +91,40 @@ const DEFAULT_VIEWPORT: ViewportState = {
 };
 
 export const useCanvasStore = create<CanvasState>()((set, get) => {
-  const updateZoomAroundCenter = (targetZoom: number) => {
+  const applyViewport = (
+    nextViewport: ViewportState,
+    label: string,
+    options?: { batchKey?: string | null; skipHistory?: boolean },
+  ) => {
+    const currentViewport = get().viewport;
+    if (viewportClose(currentViewport, nextViewport)) {
+      return false;
+    }
+
+    const shouldRecord = !options?.skipHistory;
+    const history = shouldRecord ? prepareHistory() : null;
+
+    set({ viewport: nextViewport });
+
+    if (!history) {
+      return true;
+    }
+
+    const resolvedBatchKey =
+      options?.batchKey === undefined ? HISTORY_BATCH_VIEWPORT : options.batchKey;
+
+    history.record(label, {
+      batchKey: resolvedBatchKey ?? undefined,
+    });
+    return true;
+  };
+
+  const updateZoomAroundCenter = (targetZoom: number, label: string, batchKey: string | null = null) => {
     const { viewport, canvasSize } = get();
     const nextZoom = clamp(targetZoom, MIN_ZOOM, MAX_ZOOM);
 
     if (canvasSize.width === 0 || canvasSize.height === 0) {
-      set({ viewport: { ...viewport, zoom: nextZoom } });
+      applyViewport({ ...viewport, zoom: nextZoom }, label, { batchKey });
       return;
     }
 
@@ -73,7 +133,7 @@ export const useCanvasStore = create<CanvasState>()((set, get) => {
     const nextX = canvasSize.width / 2 - centerWorldX * nextZoom;
     const nextY = canvasSize.height / 2 - centerWorldY * nextZoom;
 
-    set({ viewport: { x: nextX, y: nextY, zoom: nextZoom } });
+    applyViewport({ x: nextX, y: nextY, zoom: nextZoom }, label, { batchKey });
   };
 
   return {
@@ -83,53 +143,52 @@ export const useCanvasStore = create<CanvasState>()((set, get) => {
     activeTool: 'select',
     isSpacePanning: false,
     fabricCanvas: null,
-    setViewport: (viewport) =>
-      set({
-        viewport: {
-          x: viewport.x,
-          y: viewport.y,
-          zoom: clamp(viewport.zoom, MIN_ZOOM, MAX_ZOOM),
-        },
-      }),
-    setPan: (x, y) =>
-      set((state) => ({
-        viewport: {
-          ...state.viewport,
-          x,
-          y,
-        },
-      })),
-    setZoom: (zoom) =>
-      set((state) => ({
-        viewport: {
-          ...state.viewport,
-          zoom: clamp(zoom, MIN_ZOOM, MAX_ZOOM),
-        },
-      })),
+    setViewport: (viewport, options) => {
+      const nextViewport = {
+        x: viewport.x,
+        y: viewport.y,
+        zoom: clamp(viewport.zoom, MIN_ZOOM, MAX_ZOOM),
+      } satisfies ViewportState;
+
+      applyViewport(nextViewport, options?.label ?? 'Adjust viewport', {
+        batchKey: options?.batchKey,
+        skipHistory: options?.skipHistory,
+      });
+    },
+    setPan: (x, y) => {
+      const current = get().viewport;
+      applyViewport({ x, y, zoom: current.zoom }, 'Pan canvas');
+    },
+    setZoom: (zoom) => {
+      const current = get().viewport;
+      applyViewport(
+        { ...current, zoom: clamp(zoom, MIN_ZOOM, MAX_ZOOM) },
+        'Adjust zoom',
+      );
+    },
     zoomIn: () => {
       const { viewport } = get();
-      updateZoomAroundCenter(viewport.zoom * ZOOM_IN_FACTOR);
+      updateZoomAroundCenter(viewport.zoom * ZOOM_IN_FACTOR, 'Zoom in', null);
     },
     zoomOut: () => {
       const { viewport } = get();
-      updateZoomAroundCenter(viewport.zoom * ZOOM_OUT_FACTOR);
+      updateZoomAroundCenter(viewport.zoom * ZOOM_OUT_FACTOR, 'Zoom out', null);
     },
     zoomTo: (zoom) => {
-      updateZoomAroundCenter(zoom);
+      updateZoomAroundCenter(zoom, 'Set zoom');
     },
     zoomToFit: (bounds) => {
       const { canvasSize } = get();
 
       if (canvasSize.width === 0 || canvasSize.height === 0) {
-        updateZoomAroundCenter(DEFAULT_ZOOM);
+        updateZoomAroundCenter(DEFAULT_ZOOM, 'Zoom to fit', null);
         return;
       }
 
       if (!bounds || bounds.width === 0 || bounds.height === 0) {
-        const nextZoom = DEFAULT_ZOOM;
         const x = canvasSize.width / 2;
         const y = canvasSize.height / 2;
-        set({ viewport: { x, y, zoom: nextZoom } });
+        applyViewport({ x, y, zoom: DEFAULT_ZOOM }, 'Zoom to fit', { batchKey: null });
         return;
       }
 
@@ -147,10 +206,10 @@ export const useCanvasStore = create<CanvasState>()((set, get) => {
       const x = canvasSize.width / 2 - centerX * targetZoom;
       const y = canvasSize.height / 2 - centerY * targetZoom;
 
-      set({ viewport: { x, y, zoom: targetZoom } });
+      applyViewport({ x, y, zoom: targetZoom }, 'Zoom to fit', { batchKey: null });
     },
     zoomTo100: () => {
-      updateZoomAroundCenter(DEFAULT_ZOOM);
+      updateZoomAroundCenter(DEFAULT_ZOOM, 'Reset zoom', null);
     },
     setCanvasSize: (size) =>
       set((state) => {
@@ -164,15 +223,65 @@ export const useCanvasStore = create<CanvasState>()((set, get) => {
             ...state.viewport,
             x: size.width / 2,
             y: size.height / 2,
-          };
+          } satisfies ViewportState;
         }
 
         return partial;
       }),
-    setGridVisible: (visible) => set({ gridVisible: visible }),
-    toggleGrid: () => set((state) => ({ gridVisible: !state.gridVisible })),
+    setGridVisible: (visible) => {
+      const current = get().gridVisible;
+      if (current === visible) {
+        return;
+      }
+      const history = prepareHistory();
+      set({ gridVisible: visible });
+      history.record(visible ? 'Show grid' : 'Hide grid', {
+        batchKey: HISTORY_BATCH_GRID,
+      });
+    },
+    toggleGrid: () => {
+      const nextVisible = !get().gridVisible;
+      get().setGridVisible(nextVisible);
+    },
     setActiveTool: (tool) => set({ activeTool: tool }),
     setSpacePanning: (active) => set({ isSpacePanning: active }),
     setFabricCanvas: (canvas) => set({ fabricCanvas: canvas }),
   };
+});
+
+registerHistorySlice<CanvasHistorySnapshot>('canvas', {
+  capture: () => {
+    const state = useCanvasStore.getState();
+    return {
+      viewport: cloneViewport(state.viewport),
+      gridVisible: state.gridVisible,
+    } satisfies CanvasHistorySnapshot;
+  },
+  apply: (snapshot) => {
+    useCanvasStore.setState((state) => ({
+      ...state,
+      viewport: {
+        x: snapshot.viewport.x,
+        y: snapshot.viewport.y,
+        zoom: clamp(snapshot.viewport.zoom, MIN_ZOOM, MAX_ZOOM),
+      },
+      gridVisible: snapshot.gridVisible,
+    }));
+
+    const fabricCanvas = useCanvasStore.getState().fabricCanvas;
+    if (fabricCanvas) {
+      fabricCanvas.requestRenderAll();
+    }
+  },
+  equals: (first, second) => {
+    if (!first || !second) {
+      return false;
+    }
+
+    if (first.gridVisible !== second.gridVisible) {
+      return false;
+    }
+
+    return viewportClose(first.viewport, second.viewport);
+  },
 });
