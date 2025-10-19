@@ -2,7 +2,7 @@
 import { useEffect, useRef } from 'react';
 import { fabric } from 'fabric';
 import { createFabricObject, fabricToCanvasObject } from '../utils/fabricUtils';
-import useEditorStore, { CanvasObject } from '../store/editorStore';
+import useEditorStore from '../store/editorStore';
 import { useCanvasDrawing } from './useCanvasDrawing';
 import { regularPolygonPointsRelative } from '../utils/geometry/polygon';
 
