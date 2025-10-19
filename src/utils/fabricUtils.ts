@@ -1,6 +1,7 @@
 // src/utils/fabricUtils.ts
 import { fabric } from 'fabric';
 import { CanvasObject } from '../store/editorStore';
+import { regularPolygonPointsRelative, clampSides } from './geometry/polygon';
 
 // Generate UUID using crypto API
 const generateId = (): string => {
@@ -21,6 +22,7 @@ const FABRIC_CONSTRUCTORS: Record<string, any> = {
   ellipse: fabric.Ellipse,
   line: fabric.Line,
   text: fabric.IText,
+  polygon: fabric.Polygon,
 };
 
 // Convert our CanvasObject to a Fabric object
@@ -80,6 +82,26 @@ export const createFabricObject = (obj: CanvasObject): fabric.Object => {
         selectable: true,
       });
       break;
+
+    case 'polygon': {
+      const radius = Math.max(0, obj.radius ?? Math.min(width, height) / 2);
+      const sides = clampSides(obj.sides ?? 5);
+      const points = regularPolygonPointsRelative(radius, sides);
+      fabricObj = new fabric.Polygon(points as any, {
+        left: x,
+        top: y,
+        fill,
+        stroke,
+        strokeWidth,
+        opacity,
+        angle: rotation,
+        selectable: true,
+        objectCaching: false,
+      });
+      // Maintain regularity when scaling
+      (fabricObj as any).lockUniScaling = true;
+      break;
+    }
       
     default:
       fabricObj = new FabricClass({
@@ -101,7 +123,10 @@ export const createFabricObject = (obj: CanvasObject): fabric.Object => {
     id,
     type,
     createdAt: obj.metadata.createdAt,
-    createdBy: obj.metadata.createdBy
+    createdBy: obj.metadata.createdBy,
+    // Polygon-specific
+    sides: obj.sides,
+    radius: obj.radius,
   });
   
   return fabricObj;
@@ -110,13 +135,18 @@ export const createFabricObject = (obj: CanvasObject): fabric.Object => {
 // Convert Fabric object back to our CanvasObject format
 export const fabricToCanvasObject = (fabricObj: fabric.Object): CanvasObject => {
   const data = fabricObj.get('data') || {};
-  const baseProps = {
-    id: data.id || generateId(),
-    type: data.type || 'rectangle',
+  const width = (fabricObj as any).getScaledWidth?.() || (fabricObj as any).width || 0;
+  const height = (fabricObj as any).getScaledHeight?.() || (fabricObj as any).height || 0;
+
+  const type = (data.type as string) || (fabricObj as any).type || 'rectangle';
+
+  const baseProps: CanvasObject = {
+    id: (data as any).id || generateId(),
+    type,
     x: fabricObj.left || 0,
     y: fabricObj.top || 0,
-    width: (fabricObj as any).width || (fabricObj as any).getScaledWidth?.() || 0,
-    height: (fabricObj as any).height || (fabricObj as any).getScaledHeight?.() || 0,
+    width,
+    height,
     rotation: fabricObj.angle || 0,
     fill: (fabricObj as any).fill || '#000000',
     stroke: (fabricObj as any).stroke || '',
@@ -124,11 +154,18 @@ export const fabricToCanvasObject = (fabricObj: fabric.Object): CanvasObject => 
     opacity: fabricObj.opacity ?? 1,
     text: (fabricObj as any).text,
     metadata: {
-      createdAt: data.createdAt || new Date().toISOString(),
+      createdAt: (data as any).createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      createdBy: data.createdBy || 'user',
+      createdBy: (data as any).createdBy || 'user',
     },
   };
+
+  if (type === 'polygon') {
+    const polygonSides = (data as any).sides ?? ((fabricObj as any).points?.length ?? undefined);
+    const radius = Math.min(width, height) / 2;
+    (baseProps as any).sides = polygonSides;
+    (baseProps as any).radius = radius;
+  }
   
   return baseProps;
 };

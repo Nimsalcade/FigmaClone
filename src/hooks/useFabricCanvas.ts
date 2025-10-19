@@ -4,6 +4,7 @@ import { fabric } from 'fabric';
 import { createFabricObject, fabricToCanvasObject } from '../utils/fabricUtils';
 import useEditorStore, { CanvasObject } from '../store/editorStore';
 import { useCanvasDrawing } from './useCanvasDrawing';
+import { regularPolygonPointsRelative } from '../utils/geometry/polygon';
 
 const useFabricCanvas = () => {
   const canvasRef = useRef<fabric.Canvas | null>(null);
@@ -135,7 +136,7 @@ const useFabricCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const isDrawingTool = ['rectangle', 'ellipse', 'line', 'text'].includes(activeTool);
+    const isDrawingTool = ['rectangle', 'ellipse', 'line', 'text', 'polygon'].includes(activeTool);
     
     // Enable/disable selection based on tool
     canvas.selection = activeTool === 'select';
@@ -149,7 +150,9 @@ const useFabricCanvas = () => {
         case 'hand': return 'grab';
         case 'rectangle':
         case 'ellipse':
-        case 'line': return 'crosshair';
+        case 'line':
+        case 'polygon':
+          return 'crosshair';
         case 'text': return 'text';
         default: return 'default';
       }
@@ -234,6 +237,18 @@ const useFabricCanvas = () => {
             text: storeObj.text || '',
             fill: storeObj.fill,
           });
+        } else if (fabricObj.type === 'polygon') {
+          const sides = (storeObj.sides as number) ?? (fabricObj as any).points?.length ?? 5;
+          const radius = (storeObj.radius as number) ?? Math.min(storeObj.width, storeObj.height) / 2;
+          const points = regularPolygonPointsRelative(Math.max(0.0001, radius), sides) as any;
+          (fabricObj as fabric.Polygon).set({
+            left: storeObj.x,
+            top: storeObj.y,
+            fill: storeObj.fill,
+            stroke: storeObj.stroke,
+            strokeWidth: storeObj.strokeWidth,
+            points,
+          } as any);
         }
 
         fabricObj.setCoords();

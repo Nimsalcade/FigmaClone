@@ -1,5 +1,6 @@
 // src/store/editorStore.ts
 import { create } from 'zustand';
+import { registerHistorySlice, useHistoryStore } from './historyStore';
 
 // Generate UUID using crypto API  
 const generateId = (): string => {
@@ -13,7 +14,7 @@ const generateId = (): string => {
   });
 };
 
-export type ToolType = 'select' | 'hand' | 'rectangle' | 'ellipse' | 'line' | 'text';
+export type ToolType = 'select' | 'hand' | 'rectangle' | 'ellipse' | 'line' | 'text' | 'polygon';
 
 export interface CanvasObject {
   id: string;
@@ -28,12 +29,23 @@ export interface CanvasObject {
   strokeWidth: number;
   opacity: number;
   text?: string;
+  // Polygon-specific (optional for other shapes)
+  sides?: number;
+  radius?: number;
   metadata: {
     createdAt: string;
     updatedAt: string;
     createdBy: string;
   };
 }
+
+const prepareHistory = () => {
+  const history = useHistoryStore.getState();
+  if (!history.initialized) {
+    history.initialize('Initial canvas state');
+  }
+  return history;
+};
 
 interface EditorState {
   // Tool state
@@ -72,6 +84,7 @@ interface EditorState {
   createEllipse: (x: number, y: number, width: number, height: number) => string;
   createLine: (x1: number, y1: number, x2: number, y2: number) => string;
   createText: (x: number, y: number, text: string) => string;
+  createPolygon: (x: number, y: number, radius: number, sides: number) => string;
 }
 
 const useEditorStore = create<EditorState>((set, get) => ({
@@ -105,6 +118,8 @@ const useEditorStore = create<EditorState>((set, get) => ({
         },
       },
     }));
+
+    prepareHistory().record(`Add ${object.type}`, { batchKey: 'editor:objects' });
     
     return id;
   },
@@ -128,9 +143,13 @@ const useEditorStore = create<EditorState>((set, get) => ({
         },
       };
     });
+
+    const type = get().canvasObjects[id]?.type ?? 'object';
+    prepareHistory().record(`Update ${type}`, { batchKey: 'editor:objects' });
   },
   
   deleteObject: (id) => {
+    const type = get().canvasObjects[id]?.type ?? 'object';
     set((state) => {
       const newObjects = { ...state.canvasObjects };
       delete newObjects[id];
@@ -139,10 +158,17 @@ const useEditorStore = create<EditorState>((set, get) => ({
         selectedObjectIds: state.selectedObjectIds.filter((objId) => objId !== id),
       };
     });
+    prepareHistory().record(`Delete ${type}`, { batchKey: 'editor:objects' });
   },
   
-  selectObjects: (ids) => set({ selectedObjectIds: [...new Set(ids)] }),
-  clearSelection: () => set({ selectedObjectIds: [] }),
+  selectObjects: (ids) => {
+    set({ selectedObjectIds: [...new Set(ids)] });
+    prepareHistory().record('Select objects', { batchKey: 'editor:selection' });
+  },
+  clearSelection: () => {
+    set({ selectedObjectIds: [] });
+    prepareHistory().record('Clear selection', { batchKey: 'editor:selection' });
+  },
   setViewport: (zoom, pan) => set({ zoom, pan }),
 
   // Object manipulation methods
@@ -157,6 +183,7 @@ const useEditorStore = create<EditorState>((set, get) => ({
         selectedObjectIds: [],
       };
     });
+    prepareHistory().record('Delete selected', { batchKey: 'editor:objects' });
   },
 
   duplicateSelected: () => {
@@ -178,6 +205,7 @@ const useEditorStore = create<EditorState>((set, get) => ({
     if (duplicatedIds.length > 0) {
       get().selectObjects(duplicatedIds);
     }
+    prepareHistory().record('Duplicate selected', { batchKey: 'editor:objects' });
   },
 
   copySelected: () => {
@@ -207,12 +235,14 @@ const useEditorStore = create<EditorState>((set, get) => ({
     if (pastedIds.length > 0) {
       get().selectObjects(pastedIds);
     }
+    prepareHistory().record('Paste', { batchKey: 'editor:objects' });
   },
 
   selectAll: () => {
     const state = get();
     const allIds = Object.keys(state.canvasObjects);
     set({ selectedObjectIds: allIds });
+    prepareHistory().record('Select all', { batchKey: 'editor:selection' });
   },
   
   // Shape creation helpers
@@ -276,6 +306,48 @@ const useEditorStore = create<EditorState>((set, get) => ({
       text,
     });
   },
+
+  createPolygon: (x, y, radius, sides) => {
+    const size = Math.max(0, radius * 2);
+    return get().addObject({
+      type: 'polygon',
+      x,
+      y,
+      width: size,
+      height: size,
+      rotation: 0,
+      fill: '#f59e0b',
+      stroke: '#b45309',
+      strokeWidth: 1,
+      opacity: 1,
+      radius,
+      sides,
+    });
+  },
 }));
 
 export default useEditorStore;
+
+// Register editor history slice (objects + selection)
+interface EditorHistorySnapshot {
+  canvasObjects: Record<string, CanvasObject>;
+  selectedObjectIds: string[];
+}
+
+registerHistorySlice<EditorHistorySnapshot>('editor', {
+  capture: () => {
+    const state = useEditorStore.getState();
+    return {
+      canvasObjects: structuredClone(state.canvasObjects),
+      selectedObjectIds: [...state.selectedObjectIds],
+    } satisfies EditorHistorySnapshot;
+  },
+  apply: (snapshot) => {
+    useEditorStore.setState((state) => ({
+      ...state,
+      canvasObjects: structuredClone(snapshot.canvasObjects),
+      selectedObjectIds: [...snapshot.selectedObjectIds],
+    }));
+  },
+  equals: (a, b) => JSON.stringify(a) === JSON.stringify(b),
+});

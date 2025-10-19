@@ -2,11 +2,13 @@
 import { useCallback, useRef } from 'react';
 import { fabric } from 'fabric';
 import useEditorStore, { ToolType } from '../store/editorStore';
+import { regularPolygonPointsRelative, DEFAULT_POLYGON_SIDES } from '../utils/geometry/polygon';
 
 interface DrawingState {
   isDrawing: boolean;
   startPoint: { x: number; y: number } | null;
   currentObject: fabric.Object | null;
+  polygonSides: number;
 }
 
 export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) => {
@@ -15,13 +17,15 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
     createRectangle, 
     createEllipse, 
     createLine, 
-    createText 
+    createText,
+    createPolygon,
   } = useEditorStore();
   
   const drawingState = useRef<DrawingState>({
     isDrawing: false,
     startPoint: null,
     currentObject: null,
+    polygonSides: DEFAULT_POLYGON_SIDES,
   });
 
   const handleMouseDown = useCallback((e: fabric.IEvent<MouseEvent>) => {
@@ -76,6 +80,24 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
         });
         break;
 
+      case 'polygon': {
+        const sides = drawingState.current.polygonSides || DEFAULT_POLYGON_SIDES;
+        // Start with zero radius polygon at start point
+        const points = regularPolygonPointsRelative(0.0001, sides) as any;
+        previewObject = new fabric.Polygon(points, {
+          left: pointer.x,
+          top: pointer.y,
+          fill: 'rgba(245, 158, 11, 0.3)',
+          stroke: '#b45309',
+          strokeWidth: 1,
+          selectable: false,
+          evented: false,
+          objectCaching: false,
+        });
+        (previewObject as any).lockUniScaling = true;
+        break;
+      }
+
       case 'text':
         // For text, we create immediately and don't need preview
         const textId = createText(pointer.x, pointer.y, 'Click to edit');
@@ -88,7 +110,7 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
       canvas.add(previewObject);
       canvas.renderAll();
     }
-  }, [fabricCanvas, activeTool, createRectangle, createEllipse, createLine, createText]);
+  }, [fabricCanvas, activeTool, createRectangle, createEllipse, createLine, createText, createPolygon]);
 
   const handleMouseMove = useCallback((e: fabric.IEvent<MouseEvent>) => {
     const canvas = fabricCanvas.current;
@@ -147,6 +169,33 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
           y2: startPoint.y + height,
         });
         break;
+
+      case 'polygon': {
+        const dx = pointer.x - startPoint.x;
+        const dy = pointer.y - startPoint.y;
+        let centerX: number;
+        let centerY: number;
+        let radius: number;
+        if (isShiftPressed) {
+          centerX = startPoint.x;
+          centerY = startPoint.y;
+          radius = Math.sqrt(dx * dx + dy * dy);
+        } else {
+          centerX = startPoint.x + dx / 2;
+          centerY = startPoint.y + dy / 2;
+          radius = 0.5 * Math.min(Math.abs(dx), Math.abs(dy));
+        }
+        radius = Math.max(0.0001, radius);
+        const sides = drawingState.current.polygonSides || DEFAULT_POLYGON_SIDES;
+        const points = regularPolygonPointsRelative(radius, sides) as any;
+        (currentObject as fabric.Polygon).set({
+          left: centerX - radius,
+          top: centerY - radius,
+          points,
+        } as any);
+        (currentObject as fabric.Polygon).setCoords();
+        break;
+      }
     }
 
     canvas.renderAll();
@@ -206,6 +255,27 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
         case 'line':
           createLine(startPoint.x, startPoint.y, startPoint.x + width, startPoint.y + height);
           break;
+        case 'polygon': {
+          // Calculate center + radius based on same logic as preview
+          const dx = pointer.x - startPoint.x;
+          const dy = pointer.y - startPoint.y;
+          let centerX: number;
+          let centerY: number;
+          let radius: number;
+          if (isShiftPressed) {
+            centerX = startPoint.x;
+            centerY = startPoint.y;
+            radius = Math.sqrt(dx * dx + dy * dy);
+          } else {
+            centerX = startPoint.x + dx / 2;
+            centerY = startPoint.y + dy / 2;
+            radius = 0.5 * Math.min(Math.abs(dx), Math.abs(dy));
+          }
+          radius = Math.max(0, radius);
+          const sides = drawingState.current.polygonSides || DEFAULT_POLYGON_SIDES;
+          createPolygon(centerX - radius, centerY - radius, radius, sides);
+          break;
+        }
       }
     }
 
@@ -217,7 +287,7 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
     };
 
     canvas.renderAll();
-  }, [fabricCanvas, activeTool, createRectangle, createEllipse, createLine]);
+  }, [fabricCanvas, activeTool, createRectangle, createEllipse, createLine, createPolygon]);
 
   return {
     handleMouseDown,

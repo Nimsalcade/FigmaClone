@@ -204,13 +204,58 @@ export const PropertiesPanel: React.FC = () => {
         </div>
       </div>
 
+      {/* Polygon Section (for polygon objects) */}
+      {hasSelection && selectedObjects.some(obj => obj.type === 'polygon') && (
+        <div className="mb-6">
+          <h3 className="text-xs font-medium text-gray-600 uppercase tracking-wider mb-3">
+            Polygon
+          </h3>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Sides (3–12)</label>
+                <input
+                  type="number"
+                  value={getSharedValue('sides' as any)}
+                  onChange={(e) => {
+                    let v = Math.round(parseFloat(e.target.value) || 0);
+                    v = Math.max(3, Math.min(12, v));
+                    selectedObjectIds.forEach(id => updateObject(id, { sides: v } as any));
+                  }}
+                  min={3}
+                  max={12}
+                  className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder={!singleSelection ? 'Mixed' : ''}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500 mb-1">Radius</label>
+                <input
+                  type="number"
+                  value={getSharedValue('radius' as any)}
+                  onChange={(e) => {
+                    let r = parseFloat(e.target.value) || 0;
+                    r = Math.max(1, r);
+                    const size = r * 2;
+                    selectedObjectIds.forEach(id => updateObject(id, { radius: r, width: size, height: size } as any));
+                  }}
+                  min={1}
+                  className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  placeholder={!singleSelection ? 'Mixed' : ''}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Text Section (for text objects) */}
       {singleSelection && selectedObjects[0].type === 'text' && (
         <div className="mb-6">
           <h3 className="text-xs font-medium text-gray-600 uppercase tracking-wider mb-3">
             Text
           </h3>
-          
+
           <div className="space-y-3">
             <div>
               <label className="block text-xs text-gray-500 mb-1">Content</label>
@@ -231,7 +276,7 @@ export const PropertiesPanel: React.FC = () => {
         <h3 className="text-xs font-medium text-gray-600 uppercase tracking-wider mb-3">
           Object Info
         </h3>
-        
+
         {singleSelection && (
           <div className="space-y-2 text-xs text-gray-600">
             <div>Type: <span className="font-medium">{selectedObjects[0].type}</span></div>
@@ -242,6 +287,6 @@ export const PropertiesPanel: React.FC = () => {
           </div>
         )}
       </div>
-    </div>
-  );
-};
+      </div>
+      );
+      };
