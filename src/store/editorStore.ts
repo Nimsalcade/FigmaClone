@@ -14,9 +14,9 @@ const generateId = (): string => {
   });
 };
 
-export type ToolType = 'select' | 'hand' | 'rectangle' | 'ellipse' | 'line' | 'text' | 'triangle' | 'star' | 'polygon';
+export type ToolType = 'select' | 'hand' | 'rectangle' | 'roundedRectangle' | 'ellipse' | 'line' | 'text' | 'triangle' | 'star' | 'polygon';
 
-export type ShapeType = 'rectangle' | 'ellipse' | 'line' | 'text' | 'triangle' | 'star' | 'polygon';
+export type ShapeType = 'rectangle' | 'roundedRectangle' | 'ellipse' | 'line' | 'text' | 'triangle' | 'star' | 'polygon';
 
 export interface TriangleProps {
   mode: 'equilateral' | 'isosceles' | 'scalene';
@@ -36,6 +36,11 @@ export interface PolygonProps {
   radius: number;
 }
 
+export interface RoundedRectProps {
+  radius: number;
+  radii?: { tl: number; tr: number; br: number; bl: number };
+}
+
 export interface CanvasObject {
   id: string;
   type: ShapeType | string;
@@ -52,6 +57,7 @@ export interface CanvasObject {
   triangle?: TriangleProps;
   star?: StarProps;
   polygon?: PolygonProps;
+  roundedRectangle?: RoundedRectProps;
   metadata: {
     createdAt: string;
     updatedAt: string;
@@ -93,6 +99,13 @@ interface EditorState {
   
   // Shape creation
   createRectangle: (x: number, y: number, width: number, height: number) => string;
+  createRoundedRectangle: (
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    props?: { radius?: number; radii?: { tl?: number; tr?: number; br?: number; bl?: number } }
+  ) => string;
   createEllipse: (x: number, y: number, width: number, height: number) => string;
   createLine: (x1: number, y1: number, x2: number, y2: number) => string;
   createText: (x: number, y: number, text: string) => string;
@@ -289,6 +302,32 @@ const useEditorStore = create<EditorState>((set, get) => ({
       stroke: '#1d4ed8',
       strokeWidth: 1,
       opacity: 1,
+    });
+  },
+  
+  createRoundedRectangle: (x, y, width, height, props) => {
+    const radius = Math.max(0, Math.round(props?.radius ?? 12));
+    const radiiOverrides = props?.radii ?? {};
+    return get().addObject({
+      type: 'roundedRectangle',
+      x,
+      y,
+      width,
+      height,
+      rotation: 0,
+      fill: '#3b82f6',
+      stroke: '#1d4ed8',
+      strokeWidth: 1,
+      opacity: 1,
+      roundedRectangle: {
+        radius,
+        radii: {
+          tl: radiiOverrides.tl ?? radius,
+          tr: radiiOverrides.tr ?? radius,
+          br: radiiOverrides.br ?? radius,
+          bl: radiiOverrides.bl ?? radius,
+        },
+      },
     });
   },
   

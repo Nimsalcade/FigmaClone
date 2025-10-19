@@ -5,6 +5,7 @@ import { createFabricObject, fabricToCanvasObject } from '../utils/fabricUtils';
 import { getTrianglePoints } from '../utils/geometry/triangle';
 import { getStarPoints } from '../utils/geometry/star';
 import { getRegularPolygonPoints } from '../utils/geometry/polygon';
+import { buildRoundedRectPath, normalizeRadii } from '../utils/geometry/roundedRect';
 import useEditorStore from '../store/editorStore';
 import { useCanvasDrawing } from './useCanvasDrawing';
 
@@ -138,7 +139,7 @@ const useFabricCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const isDrawingTool = ['rectangle', 'ellipse', 'line', 'text', 'triangle', 'star', 'polygon'].includes(activeTool);
+    const isDrawingTool = ['rectangle', 'roundedRectangle', 'ellipse', 'line', 'text', 'triangle', 'star', 'polygon'].includes(activeTool);
     
     // Enable/disable selection based on tool
     canvas.selection = activeTool === 'select';
@@ -151,6 +152,7 @@ const useFabricCanvas = () => {
       switch (tool) {
         case 'hand': return 'grab';
         case 'rectangle':
+        case 'roundedRectangle':
         case 'ellipse':
         case 'line':
         case 'triangle':
@@ -264,6 +266,18 @@ const useFabricCanvas = () => {
           const pts = getRegularPolygonPoints({ sides, radius, rotation: -Math.PI / 2 });
           poly.set({ left: storeObj.x, top: storeObj.y } as any);
           (poly as any).set({ points: pts, fill: storeObj.fill, stroke: storeObj.stroke, strokeWidth: storeObj.strokeWidth });
+        } else if (fabricObj.type === 'path' && (fabricObj.get('data') as any)?.type === 'roundedRectangle') {
+          const pathObj = fabricObj as fabric.Path;
+          const rr = (storeObj as any).roundedRectangle as { radius: number; radii?: { tl: number; tr: number; br: number; bl: number } } | undefined;
+          const radii = normalizeRadii(storeObj.width, storeObj.height, { radius: rr?.radius ?? 12, radii: rr?.radii });
+          const pathStr = buildRoundedRectPath(storeObj.width, storeObj.height, radii);
+          const tmp = new fabric.Path(pathStr);
+          (pathObj as any).set({
+            path: (tmp as any).path,
+            fill: storeObj.fill,
+            stroke: storeObj.stroke,
+            strokeWidth: storeObj.strokeWidth,
+          });
         }
 
         fabricObj.setCoords();

@@ -4,6 +4,7 @@ import { CanvasObject } from '../store/editorStore';
 import { getTrianglePoints, resolveEquilateralSize } from './geometry/triangle';
 import { getStarPoints, ratioFromRadii } from './geometry/star';
 import { getRegularPolygonPoints } from './geometry/polygon';
+import { buildRoundedRectPath, normalizeRadii, scaleCornerRadii } from './geometry/roundedRect';
 
 // Generate UUID using crypto API
 const generateId = (): string => {
@@ -138,6 +139,28 @@ export const createFabricObject = (obj: CanvasObject): fabric.Object => {
       break;
     }
 
+    case 'roundedRectangle': {
+      const rr = obj.roundedRectangle ?? { radius: 12 };
+      const radii = normalizeRadii(width, height, {
+        radius: rr.radius ?? 12,
+        radii: rr.radii,
+      });
+      const pathStr = buildRoundedRectPath(width, height, radii);
+      const path = new fabric.Path(pathStr, {
+        left: x,
+        top: y,
+        fill,
+        stroke,
+        strokeWidth,
+        opacity,
+        angle: rotation,
+        selectable: true,
+        objectCaching: false,
+      });
+      fabricObj = path as unknown as fabric.Object;
+      break;
+    }
+
     default:
       fabricObj = new FabricClass({
         left: x,
@@ -162,6 +185,8 @@ export const createFabricObject = (obj: CanvasObject): fabric.Object => {
     triangle: obj.triangle,
     star: obj.star,
     polygon: (obj as any).polygon,
+    roundedRectangle: (obj as any).roundedRectangle,
+    dimensions: { width, height },
     });
 
     return fabricObj;
@@ -229,6 +254,23 @@ export const fabricToCanvasObject = (fabricObj: fabric.Object): CanvasObject => 
     polygon = { sides, radius: r };
   }
 
+  let roundedRectangle = (data as any).roundedRectangle as CanvasObject['roundedRectangle'] | undefined;
+  if (data.type === 'roundedRectangle') {
+    const prevDims = (data as any).dimensions as { width: number; height: number } | undefined;
+    const prevWidth = prevDims?.width || width || 1;
+    const prevHeight = prevDims?.height || height || 1;
+    const scale = Math.min(width / Math.max(1, prevWidth), height / Math.max(1, prevHeight));
+    const prevProps = roundedRectangle ?? { radius: 12 };
+    const prevCorner = normalizeRadii(prevWidth, prevHeight, {
+      radius: prevProps.radius ?? 12,
+      radii: prevProps.radii,
+    });
+    const scaledCorner = scaleCornerRadii(prevCorner, scale);
+    const baseRadius = Math.max(0, (prevProps.radius ?? 12) * scale);
+    const norm = normalizeRadii(width, height, { radius: baseRadius, radii: scaledCorner });
+    roundedRectangle = { radius: baseRadius, radii: norm };
+  }
+
   const baseProps: CanvasObject = {
     id: (data as any).id || generateId(),
     type: (data as any).type || 'rectangle',
@@ -245,6 +287,7 @@ export const fabricToCanvasObject = (fabricObj: fabric.Object): CanvasObject => 
     triangle,
     star,
     polygon,
+    roundedRectangle,
     metadata: {
       createdAt: (data as any).createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
