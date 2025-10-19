@@ -13,7 +13,7 @@ const generateId = (): string => {
   });
 };
 
-export type ToolType = 'select' | 'hand' | 'rectangle' | 'ellipse' | 'line' | 'text';
+export type ToolType = 'select' | 'hand' | 'rectangle' | 'ellipse' | 'line' | 'text' | 'arrow';
 
 export interface CanvasObject {
   id: string;
@@ -28,11 +28,16 @@ export interface CanvasObject {
   strokeWidth: number;
   opacity: number;
   text?: string;
+  // Arrow-specific optional properties (used when type === 'arrow')
+  headType?: 'triangle' | 'diamond' | 'circle';
+  tailType?: 'none' | 'line' | 'round';
+  headSize?: number;
+  tailLength?: number;
   metadata: {
     createdAt: string;
     updatedAt: string;
     createdBy: string;
-  };
+  },
 }
 
 interface EditorState {
@@ -72,6 +77,13 @@ interface EditorState {
   createEllipse: (x: number, y: number, width: number, height: number) => string;
   createLine: (x1: number, y1: number, x2: number, y2: number) => string;
   createText: (x: number, y: number, text: string) => string;
+  createArrow: (
+    x1: number,
+    y1: number,
+    x2: number,
+    y2: number,
+    options?: { tailType?: 'none' | 'line' | 'round'; headType?: 'triangle' | 'diamond' | 'circle'; headSize?: number; tailLength?: number }
+  ) => string;
 }
 
 const useEditorStore = create<EditorState>((set, get) => ({
@@ -274,6 +286,26 @@ const useEditorStore = create<EditorState>((set, get) => ({
       strokeWidth: 0,
       opacity: 1,
       text,
+    });
+  },
+  
+  createArrow: (x1, y1, x2, y2, options) => {
+    const { tailType = 'none', headType = 'triangle', headSize = 2, tailLength = 0 } = options || {};
+    return get().addObject({
+      type: 'arrow',
+      x: x1,
+      y: y1,
+      width: x2 - x1,
+      height: y2 - y1,
+      rotation: 0,
+      fill: 'transparent',
+      stroke: '#374151',
+      strokeWidth: 2,
+      opacity: 1,
+      tailType,
+      headType,
+      headSize,
+      tailLength,
     });
   },
 }));

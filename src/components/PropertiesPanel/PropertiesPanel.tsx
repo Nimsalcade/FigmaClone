@@ -1,6 +1,7 @@
 // src/components/PropertiesPanel/PropertiesPanel.tsx
 import React, { useCallback } from 'react';
 import useEditorStore from '../../store/editorStore';
+import { ArrowSection } from './ArrowSection';
 
 export const PropertiesPanel: React.FC = () => {
   const { 
@@ -203,6 +204,9 @@ export const PropertiesPanel: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* Arrow Section (for arrow objects) */}
+      {singleSelection && selectedObjects[0].type === 'arrow' && <ArrowSection />}
 
       {/* Text Section (for text objects) */}
       {singleSelection && selectedObjects[0].type === 'text' && (

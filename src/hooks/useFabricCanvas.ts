@@ -4,6 +4,7 @@ import { fabric } from 'fabric';
 import { createFabricObject, fabricToCanvasObject } from '../utils/fabricUtils';
 import useEditorStore, { CanvasObject } from '../store/editorStore';
 import { useCanvasDrawing } from './useCanvasDrawing';
+import { computeArrowBounds } from '../utils/geometry/arrow';
 
 const useFabricCanvas = () => {
   const canvasRef = useRef<fabric.Canvas | null>(null);
@@ -66,6 +67,32 @@ const useFabricCanvas = () => {
     // Handle object modifications
     canvas.on('object:modified', (e) => {
       if (!e.target || isUpdatingFromStore.current) return;
+      const target = e.target as fabric.Object & { _objects?: fabric.Object[] };
+      const data = target.get('data') || {};
+      if (data.type === 'arrow' && data.id) {
+        const state = useEditorStore.getState();
+        const storeObj = state.canvasObjects[data.id];
+        if (storeObj) {
+          const start = { x: storeObj.x, y: storeObj.y };
+          const end = { x: storeObj.x + storeObj.width, y: storeObj.y + storeObj.height };
+          const props = {
+            tailType: storeObj.tailType ?? 'none',
+            headType: storeObj.headType ?? 'triangle',
+            headSize: storeObj.headSize ?? 2,
+            tailLength: storeObj.tailLength ?? 0,
+          };
+          const bounds = computeArrowBounds(start, end, storeObj.strokeWidth, props);
+          const left = target.left || 0;
+          const top = target.top || 0;
+          const dx = left - bounds.left;
+          const dy = top - bounds.top;
+          if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+            updateObject(data.id, { x: storeObj.x + dx, y: storeObj.y + dy });
+          }
+        }
+        return;
+      }
+
       const obj = fabricToCanvasObject(e.target);
       updateObject(obj.id, obj);
     });
@@ -135,7 +162,7 @@ const useFabricCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const isDrawingTool = ['rectangle', 'ellipse', 'line', 'text'].includes(activeTool);
+    const isDrawingTool = ['rectangle', 'ellipse', 'line', 'text', 'arrow'].includes(activeTool);
     
     // Enable/disable selection based on tool
     canvas.selection = activeTool === 'select';
@@ -189,6 +216,8 @@ const useFabricCanvas = () => {
       }
     });
 
+    const toReplace: { id: string; oldObj: fabric.Object }[] = [];
+
     // Update existing objects with new properties
     isUpdatingFromStore.current = true;
     canvas.getObjects().forEach(fabricObj => {
@@ -197,12 +226,25 @@ const useFabricCanvas = () => {
         const storeObj = canvasObjects[id];
         
         // Update position and size
-        fabricObj.set({
-          left: storeObj.x,
-          top: storeObj.y,
-          angle: storeObj.rotation,
-          opacity: storeObj.opacity,
-        });
+        const data = (fabricObj.get('data') || {}) as any;
+        if (data.type === 'arrow') {
+          const start = { x: storeObj.x, y: storeObj.y };
+          const end = { x: storeObj.x + storeObj.width, y: storeObj.y + storeObj.height };
+          const bounds = computeArrowBounds(start, end, storeObj.strokeWidth, {
+            tailType: storeObj.tailType ?? 'none',
+            headType: storeObj.headType ?? 'triangle',
+            headSize: storeObj.headSize ?? 2,
+            tailLength: storeObj.tailLength ?? 0,
+          });
+          fabricObj.set({ left: bounds.left, top: bounds.top, angle: storeObj.rotation, opacity: storeObj.opacity });
+        } else {
+          fabricObj.set({
+            left: storeObj.x,
+            top: storeObj.y,
+            angle: storeObj.rotation,
+            opacity: storeObj.opacity,
+          });
+        }
 
         // Update size based on object type
         if (fabricObj.type === 'rect') {
@@ -234,12 +276,31 @@ const useFabricCanvas = () => {
             text: storeObj.text || '',
             fill: storeObj.fill,
           });
+        } else {
+          const data = (fabricObj.get('data') || {}) as any;
+          if (data.type === 'arrow' && data.id) {
+            // Replace arrow group with updated geometry
+            toReplace.push({ id: data.id, oldObj: fabricObj });
+          }
         }
 
         fabricObj.setCoords();
       }
     });
     isUpdatingFromStore.current = false;
+
+    // Apply replacements for arrows if needed
+    if (toReplace.length > 0) {
+      toReplace.forEach(({ id, oldObj }) => {
+        const obj = canvasObjects[id];
+        if (!obj) return;
+        const newObj = createFabricObject(obj);
+        newObj.selectable = activeTool === 'select';
+        newObj.evented = activeTool === 'select';
+        canvas.remove(oldObj);
+        canvas.add(newObj);
+      });
+    }
     
     // Remove deleted objects
     canvas.getObjects().forEach(obj => {

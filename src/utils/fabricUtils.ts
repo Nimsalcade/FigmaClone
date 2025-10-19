@@ -1,6 +1,7 @@
 // src/utils/fabricUtils.ts
 import { fabric } from 'fabric';
 import { CanvasObject } from '../store/editorStore';
+import { computeArrowGeometry } from './geometry/arrow';
 
 // Generate UUID using crypto API
 const generateId = (): string => {
@@ -80,6 +81,84 @@ export const createFabricObject = (obj: CanvasObject): fabric.Object => {
         selectable: true,
       });
       break;
+
+    case 'arrow': {
+      const start = { x, y };
+      const end = { x: x + width, y: y + height };
+      const tailType = (obj as any).tailType ?? 'none';
+      const headType = (obj as any).headType ?? 'triangle';
+      const headSize = (obj as any).headSize ?? 2;
+      const tailLength = (obj as any).tailLength ?? 0;
+
+      const geo = computeArrowGeometry(start, end, strokeWidth, {
+        tailType,
+        headType,
+        headSize,
+        tailLength,
+      });
+
+      const shaft = new fabric.Line(
+        [geo.shaftStart.x, geo.shaftStart.y, geo.shaftEnd.x, geo.shaftEnd.y],
+        {
+          stroke,
+          strokeWidth,
+          opacity,
+          selectable: false,
+          evented: false,
+          strokeUniform: true,
+          strokeLineCap: tailType === 'round' ? 'round' : 'butt',
+        },
+      );
+
+      let headObj: fabric.Object;
+      if (geo.head.type === 'polygon' && geo.head.points) {
+        const xs = geo.head.points.map((p) => p.x);
+        const ys = geo.head.points.map((p) => p.y);
+        const minX = Math.min(...xs);
+        const minY = Math.min(...ys);
+        const points = geo.head.points.map((p) => ({ x: p.x - minX, y: p.y - minY }));
+        headObj = new fabric.Polygon(points, {
+          left: minX,
+          top: minY,
+          fill: stroke,
+          selectable: false,
+          evented: false,
+          objectCaching: false,
+        });
+      } else {
+        const r = geo.head.radius ?? 0;
+        const cx = geo.head.center?.x ?? end.x;
+        const cy = geo.head.center?.y ?? end.y;
+        headObj = new fabric.Circle({
+          left: cx - r,
+          top: cy - r,
+          radius: r,
+          fill: stroke,
+          selectable: false,
+          evented: false,
+          objectCaching: false,
+        });
+      }
+
+      const group = new fabric.Group([shaft, headObj], {
+        selectable: true,
+        objectCaching: false,
+      });
+
+      group.set('data', {
+        id,
+        type: 'arrow',
+        tailType,
+        headType,
+        headSize,
+        tailLength,
+        createdAt: obj.metadata.createdAt,
+        createdBy: obj.metadata.createdBy,
+      });
+
+      fabricObj = group as unknown as fabric.Object;
+      break;
+    }
       
     default:
       fabricObj = new FabricClass({
@@ -96,13 +175,15 @@ export const createFabricObject = (obj: CanvasObject): fabric.Object => {
       });
   }
   
-  // Store our internal ID for reference
-  fabricObj.set('data', { 
-    id,
-    type,
-    createdAt: obj.metadata.createdAt,
-    createdBy: obj.metadata.createdBy
-  });
+  // Store our internal ID for reference (for non-arrow types)
+  if (type !== 'arrow') {
+    fabricObj.set('data', {
+      id,
+      type,
+      createdAt: obj.metadata.createdAt,
+      createdBy: obj.metadata.createdBy,
+    });
+  }
   
   return fabricObj;
 };

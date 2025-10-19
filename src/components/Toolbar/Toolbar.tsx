@@ -1,7 +1,7 @@
 // src/components/Toolbar/Toolbar.tsx
 import React from 'react';
 import useEditorStore, { ToolType } from '../../store/editorStore';
-import { Square, Circle, Type, Move, MousePointer, Minus } from 'lucide-react';
+import { Square, Circle, Type, Move, MousePointer, Minus, ArrowRight } from 'lucide-react';
 
 const tools: { id: ToolType; icon: React.ReactNode; label: string }[] = [
   { id: 'select', icon: <MousePointer size={20} />, label: 'Select (V)' },
@@ -9,6 +9,7 @@ const tools: { id: ToolType; icon: React.ReactNode; label: string }[] = [
   { id: 'rectangle', icon: <Square size={20} />, label: 'Rectangle (R)' },
   { id: 'ellipse', icon: <Circle size={20} />, label: 'Ellipse (O)' },
   { id: 'line', icon: <Minus size={20} />, label: 'Line (L)' },
+  { id: 'arrow', icon: <ArrowRight size={20} />, label: 'Arrow (W)' },
   { id: 'text', icon: <Type size={20} />, label: 'Text (T)' },
 ];
 

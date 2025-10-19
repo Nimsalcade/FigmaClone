@@ -2,6 +2,7 @@
 import { useCallback, useRef } from 'react';
 import { fabric } from 'fabric';
 import useEditorStore, { ToolType } from '../store/editorStore';
+import { computeArrowGeometry } from '../utils/geometry/arrow';
 
 interface DrawingState {
   isDrawing: boolean;
@@ -15,7 +16,8 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
     createRectangle, 
     createEllipse, 
     createLine, 
-    createText 
+    createText,
+    createArrow,
   } = useEditorStore();
   
   const drawingState = useRef<DrawingState>({
@@ -76,6 +78,34 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
         });
         break;
 
+      case 'arrow': {
+        const shaft = new fabric.Line([pointer.x, pointer.y, pointer.x, pointer.y], {
+          stroke: '#374151',
+          strokeWidth: 2,
+          selectable: false,
+          evented: false,
+          strokeUniform: true,
+        });
+        // Start with a tiny triangle head
+        const head = new fabric.Polygon(
+          [
+            { x: pointer.x, y: pointer.y },
+            { x: pointer.x, y: pointer.y },
+            { x: pointer.x, y: pointer.y },
+          ],
+          {
+            left: pointer.x,
+            top: pointer.y,
+            fill: '#374151',
+            selectable: false,
+            evented: false,
+            objectCaching: false,
+          },
+        );
+        previewObject = new fabric.Group([shaft, head], { selectable: false, evented: false });
+        break;
+      }
+
       case 'text':
         // For text, we create immediately and don't need preview
         const textId = createText(pointer.x, pointer.y, 'Click to edit');
@@ -111,7 +141,7 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
         const size = Math.max(Math.abs(width), Math.abs(height));
         width = width >= 0 ? size : -size;
         height = height >= 0 ? size : -size;
-      } else if (activeTool === 'line') {
+      } else if (activeTool === 'line' || activeTool === 'arrow') {
         // Snap to 45-degree angles
         const angle = Math.atan2(height, width);
         const snapAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
@@ -147,6 +177,54 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
           y2: startPoint.y + height,
         });
         break;
+
+      case 'arrow': {
+        // Rebuild preview group for clarity
+        const group = currentObject as fabric.Group;
+        canvas.remove(group);
+
+        const start = { x: startPoint.x, y: startPoint.y };
+        const end = { x: startPoint.x + width, y: startPoint.y + height };
+        const stroke = '#374151';
+        const strokeWidth = 2;
+        const geo = computeArrowGeometry(start, end, strokeWidth, {
+          tailType: 'none',
+          headType: 'triangle',
+          headSize: 2,
+          tailLength: 0,
+        });
+
+        const shaft = new fabric.Line(
+          [geo.shaftStart.x, geo.shaftStart.y, geo.shaftEnd.x, geo.shaftEnd.y],
+          { stroke, strokeWidth, selectable: false, evented: false, strokeUniform: true },
+        );
+
+        let headObj: fabric.Object;
+        if (geo.head.type === 'polygon' && geo.head.points) {
+          const xs = geo.head.points.map((p) => p.x);
+          const ys = geo.head.points.map((p) => p.y);
+          const minX = Math.min(...xs);
+          const minY = Math.min(...ys);
+          const points = geo.head.points.map((p) => ({ x: p.x - minX, y: p.y - minY }));
+          headObj = new fabric.Polygon(points, {
+            left: minX,
+            top: minY,
+            fill: stroke,
+            selectable: false,
+            evented: false,
+          });
+        } else {
+          const r = geo.head.radius ?? 0;
+          const cx = geo.head.center?.x ?? end.x;
+          const cy = geo.head.center?.y ?? end.y;
+          headObj = new fabric.Circle({ left: cx - r, top: cy - r, radius: r, fill: stroke, selectable: false, evented: false });
+        }
+
+        const newGroup = new fabric.Group([shaft, headObj], { selectable: false, evented: false });
+        drawingState.current.currentObject = newGroup;
+        canvas.add(newGroup);
+        break;
+      }
     }
 
     canvas.renderAll();
@@ -178,7 +256,7 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
         const size = Math.max(Math.abs(width), Math.abs(height));
         width = width >= 0 ? size : -size;
         height = height >= 0 ? size : -size;
-      } else if (activeTool === 'line') {
+      } else if (activeTool === 'line' || activeTool === 'arrow') {
         const angle = Math.atan2(height, width);
         const snapAngle = Math.round(angle / (Math.PI / 4)) * (Math.PI / 4);
         const distance = Math.sqrt(width * width + height * height);
@@ -205,6 +283,14 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
           break;
         case 'line':
           createLine(startPoint.x, startPoint.y, startPoint.x + width, startPoint.y + height);
+          break;
+        case 'arrow':
+          createArrow(startPoint.x, startPoint.y, startPoint.x + width, startPoint.y + height, {
+            tailType: 'none',
+            headType: 'triangle',
+            headSize: 2,
+            tailLength: 0,
+          });
           break;
       }
     }

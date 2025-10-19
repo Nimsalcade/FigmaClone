@@ -175,6 +175,12 @@ export const useCanvasKeyboardShortcuts = () => {
         setActiveTool('text');
         setCanvasTool('select');
       }
+
+      if (event.code === 'KeyW') {
+        event.preventDefault();
+        setActiveTool('arrow');
+        setCanvasTool('select');
+      }
     };
 
     const handleKeyUp = (event: KeyboardEvent) => {
