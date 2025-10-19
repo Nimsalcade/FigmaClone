@@ -176,6 +176,12 @@ export const useCanvasKeyboardShortcuts = () => {
         setCanvasTool('select');
       }
 
+      if (event.code === 'KeyS') {
+        event.preventDefault();
+        setActiveTool('star');
+        setCanvasTool('select');
+      }
+
       if (event.code === 'KeyT') {
         event.preventDefault();
         setActiveTool('text');

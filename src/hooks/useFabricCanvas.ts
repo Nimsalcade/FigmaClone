@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { fabric } from 'fabric';
 import { createFabricObject, fabricToCanvasObject } from '../utils/fabricUtils';
 import { getTrianglePoints } from '../utils/geometry/triangle';
+import { getStarPoints } from '../utils/geometry/star';
 import useEditorStore from '../store/editorStore';
 import { useCanvasDrawing } from './useCanvasDrawing';
 
@@ -136,7 +137,7 @@ const useFabricCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const isDrawingTool = ['rectangle', 'ellipse', 'line', 'text', 'triangle'].includes(activeTool);
+    const isDrawingTool = ['rectangle', 'ellipse', 'line', 'text', 'triangle', 'star'].includes(activeTool);
     
     // Enable/disable selection based on tool
     canvas.selection = activeTool === 'select';
@@ -151,7 +152,8 @@ const useFabricCanvas = () => {
         case 'rectangle':
         case 'ellipse':
         case 'line':
-        case 'triangle': return 'crosshair';
+        case 'triangle':
+        case 'star': return 'crosshair';
         case 'text': return 'text';
         default: return 'default';
       }
@@ -245,6 +247,14 @@ const useFabricCanvas = () => {
           const points = getTrianglePoints({ width: triWidth, height: triHeight, mode, orientation: 'down' });
           poly.set({ left: storeObj.x, top: storeObj.y } as any);
           (poly as any).set({ points, fill: storeObj.fill, stroke: storeObj.stroke, strokeWidth: storeObj.strokeWidth });
+        } else if (fabricObj.type === 'polygon' && (fabricObj.get('data') as any)?.type === 'star') {
+          const poly = fabricObj as fabric.Polygon;
+          const pointsCount = Math.max(5, Math.min(12, storeObj.star?.points ?? 5));
+          const outerR = storeObj.star?.outerRadius ?? Math.min(storeObj.width, storeObj.height) / 2;
+          const innerR = storeObj.star?.innerRadius ?? outerR / 2;
+          const pts = getStarPoints({ points: pointsCount, innerRadius: innerR, outerRadius: outerR, rotation: -Math.PI / 2 });
+          poly.set({ left: storeObj.x, top: storeObj.y } as any);
+          (poly as any).set({ points: pts, fill: storeObj.fill, stroke: storeObj.stroke, strokeWidth: storeObj.strokeWidth });
         }
 
         fabricObj.setCoords();

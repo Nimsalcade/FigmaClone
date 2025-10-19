@@ -3,6 +3,7 @@ import { useCallback, useRef } from 'react';
 import { fabric } from 'fabric';
 import useEditorStore, { ToolType } from '../store/editorStore';
 import { getTrianglePoints, resolveEquilateralSize } from '../utils/geometry/triangle';
+import { getStarPoints } from '../utils/geometry/star';
 
 interface DrawingState {
   isDrawing: boolean;
@@ -18,6 +19,7 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
     createLine, 
     createText,
     createTriangle,
+    createStar,
   } = useEditorStore();
   
   const drawingState = useRef<DrawingState>({
@@ -96,6 +98,22 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
         break;
       }
 
+      case 'star': {
+        const minR = 1;
+        const pts = getStarPoints({ points: 5, innerRadius: 0.5 * minR, outerRadius: minR, rotation: -Math.PI / 2 });
+        const poly = new fabric.Polygon(pts as any, {
+          left: pointer.x - minR,
+          top: pointer.y - minR,
+          fill: 'rgba(253, 224, 71, 0.3)',
+          stroke: '#ca8a04',
+          strokeWidth: 1,
+          selectable: false,
+          evented: false,
+        });
+        previewObject = poly as unknown as fabric.Object;
+        break;
+      }
+
       case 'text':
         // For text, we create immediately and don't need preview
         const textId = createText(pointer.x, pointer.y, 'Click to edit');
@@ -108,7 +126,7 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
       canvas.add(previewObject);
       canvas.renderAll();
     }
-  }, [fabricCanvas, activeTool, createRectangle, createEllipse, createLine, createText, createTriangle]);
+  }, [fabricCanvas, activeTool, createRectangle, createEllipse, createLine, createText, createTriangle, createStar]);
 
   const handleMouseMove = useCallback((e: fabric.IEvent<MouseEvent>) => {
     const canvas = fabricCanvas.current;
@@ -178,6 +196,27 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
         const points = getTrianglePoints({ width: w, height: h, mode, orientation });
         (currentObject as fabric.Polygon).set({ left, top } as any);
         (currentObject as any).set({ points });
+        (currentObject as any).setCoords();
+        break;
+      }
+      
+      case 'star': {
+        const centerX = startPoint.x;
+        const centerY = startPoint.y;
+        const dx = pointer.x - centerX;
+        const dy = pointer.y - centerY;
+        const outerR = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+        let rotation = Math.atan2(dy, dx);
+        if (isShiftPressed) {
+          const snap = (Math.PI / 180) * 15; // 15 degrees
+          rotation = Math.round(rotation / snap) * snap;
+        }
+        const innerR = outerR * 0.5;
+        const left = centerX - outerR;
+        const top = centerY - outerR;
+        const pts = getStarPoints({ points: 5, innerRadius: innerR, outerRadius: outerR, rotation });
+        (currentObject as fabric.Polygon).set({ left, top } as any);
+        (currentObject as any).set({ points: pts });
         (currentObject as any).setCoords();
         break;
       }
@@ -257,6 +296,23 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
           }
           break;
         }
+        case 'star': {
+          const centerX = drawingState.current.startPoint.x;
+          const centerY = drawingState.current.startPoint.y;
+          const dx = pointer.x - centerX;
+          const dy = pointer.y - centerY;
+          const outerR = Math.max(1, Math.sqrt(dx * dx + dy * dy));
+          let rotation = Math.atan2(dy, dx);
+          if (isShiftPressed) {
+            const snap = (Math.PI / 180) * 15;
+            rotation = Math.round(rotation / snap) * snap;
+          }
+          const innerR = outerR * 0.5;
+          const left = centerX - outerR;
+          const top = centerY - outerR;
+          createStar(left, top, outerR, innerR, 5, rotation, false);
+          break;
+        }
       }
     }
 
@@ -268,7 +324,7 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
     };
 
     canvas.renderAll();
-  }, [fabricCanvas, activeTool, createRectangle, createEllipse, createLine, createTriangle]);
+  }, [fabricCanvas, activeTool, createRectangle, createEllipse, createLine, createTriangle, createStar]);
 
   return {
     handleMouseDown,
