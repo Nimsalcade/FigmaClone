@@ -1,7 +1,7 @@
 // src/hooks/useCanvasDrawing.ts
 import { useCallback, useRef } from 'react';
 import { fabric } from 'fabric';
-import useEditorStore, { ToolType } from '../store/editorStore';
+import useEditorStore from '../store/editorStore';
 import { regularPolygonPointsRelative, DEFAULT_POLYGON_SIDES } from '../utils/geometry/polygon';
 
 interface DrawingState {
