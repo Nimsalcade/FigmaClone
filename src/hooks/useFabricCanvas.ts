@@ -7,6 +7,7 @@ import { getStarPoints } from '../utils/geometry/star';
 import { getRegularPolygonPoints } from '../utils/geometry/polygon';
 import useEditorStore from '../store/editorStore';
 import { useCanvasDrawing } from './useCanvasDrawing';
+import { computeArrowShapeSpec, DEFAULT_ARROW_OPTIONS } from '../utils/geometry/arrow';
 
 const useFabricCanvas = () => {
   const canvasRef = useRef<fabric.Canvas | null>(null);
@@ -138,7 +139,7 @@ const useFabricCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const isDrawingTool = ['rectangle', 'ellipse', 'line', 'text', 'triangle', 'star', 'polygon'].includes(activeTool);
+    const isDrawingTool = ['rectangle', 'ellipse', 'line', 'arrow', 'text', 'triangle', 'star', 'polygon'].includes(activeTool);
     
     // Enable/disable selection based on tool
     canvas.selection = activeTool === 'select';
@@ -153,6 +154,7 @@ const useFabricCanvas = () => {
         case 'rectangle':
         case 'ellipse':
         case 'line':
+        case 'arrow':
         case 'triangle':
         case 'star':
         case 'polygon': return 'crosshair';
@@ -264,6 +266,93 @@ const useFabricCanvas = () => {
           const pts = getRegularPolygonPoints({ sides, radius, rotation: -Math.PI / 2 });
           poly.set({ left: storeObj.x, top: storeObj.y } as any);
           (poly as any).set({ points: pts, fill: storeObj.fill, stroke: storeObj.stroke, strokeWidth: storeObj.strokeWidth });
+        } else if (fabricObj.type === 'group' && (fabricObj.get('data') as any)?.type === 'arrow') {
+          const group: any = fabricObj as any;
+          const arrow = (storeObj as any).arrow || DEFAULT_ARROW_OPTIONS;
+          const spec = computeArrowShapeSpec(Math.max(1, storeObj.width), Math.max(0.5, storeObj.strokeWidth || 2), arrow);
+
+          // Clear existing parts and rebuild
+          const existing: any[] = (group._objects || []).slice();
+          if (existing && existing.length) {
+            existing.forEach((child: any) => {
+              try {
+                group.removeWithUpdate ? group.removeWithUpdate(child) : group.remove(child);
+              } catch {
+                // ignore
+              }
+            });
+          }
+
+          const parts: fabric.Object[] = [];
+          const shaft = new fabric.Line([spec.shaft.x1, spec.shaft.y1, spec.shaft.x2, spec.shaft.y2], {
+            stroke: storeObj.stroke || '#6b7280',
+            strokeWidth: Math.max(0.5, storeObj.strokeWidth || 2),
+            selectable: false,
+            evented: false,
+          });
+          (shaft as any).set('data', { role: 'shaft' });
+          parts.push(shaft);
+
+          if (spec.head.type === 'polygon' && spec.head.polygon) {
+            const head = new fabric.Polygon(spec.head.polygon.points as any, {
+              fill: storeObj.stroke || '#6b7280',
+              stroke: 'transparent',
+              selectable: false,
+              evented: false,
+            });
+            (head as any).set('data', { role: 'head' });
+            parts.push(head);
+          } else if (spec.head.type === 'circle' && spec.head.circle) {
+            const head = new fabric.Circle({
+              left: spec.head.circle.cx - spec.head.circle.r,
+              top: spec.head.circle.cy - spec.head.circle.r,
+              radius: spec.head.circle.r,
+              fill: storeObj.stroke || '#6b7280',
+              selectable: false,
+              evented: false,
+              originX: 'left',
+              originY: 'top',
+            });
+            (head as any).set('data', { role: 'head' });
+            parts.push(head);
+          }
+
+          if (spec.tail) {
+            if (spec.tail.type === 'line' && spec.tail.line) {
+              const tail = new fabric.Line([spec.tail.line.x1, spec.tail.line.y1, spec.tail.line.x2, spec.tail.line.y2], {
+                stroke: storeObj.stroke || '#6b7280',
+                strokeWidth: Math.max(0.5, storeObj.strokeWidth || 2),
+                selectable: false,
+                evented: false,
+              });
+              (tail as any).set('data', { role: 'tail' });
+              parts.push(tail);
+            } else if (spec.tail.type === 'circle' && spec.tail.circle) {
+              const tail = new fabric.Circle({
+                left: spec.tail.circle.cx - spec.tail.circle.r,
+                top: spec.tail.circle.cy - spec.tail.circle.r,
+                radius: spec.tail.circle.r,
+                fill: storeObj.stroke || '#6b7280',
+                selectable: false,
+                evented: false,
+                originX: 'left',
+                originY: 'top',
+              });
+              (tail as any).set('data', { role: 'tail' });
+              parts.push(tail);
+            }
+          }
+
+          // Add parts back
+          parts.forEach((p) => {
+            try {
+              group.addWithUpdate ? group.addWithUpdate(p) : group.add(p);
+            } catch {
+              // ignore
+            }
+          });
+
+          (group as any).set({ stroke: storeObj.stroke || '#6b7280', strokeWidth: Math.max(0.5, storeObj.strokeWidth || 2), fill: storeObj.fill ?? 'transparent' });
         }
 
         fabricObj.setCoords();

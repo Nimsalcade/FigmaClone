@@ -170,6 +170,12 @@ export const useCanvasKeyboardShortcuts = () => {
         setCanvasTool('select');
       }
 
+      if (event.code === 'KeyW') {
+        event.preventDefault();
+        setActiveTool('arrow');
+        setCanvasTool('select');
+      }
+
       if (event.code === 'KeyY') {
         event.preventDefault();
         setActiveTool('triangle');

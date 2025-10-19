@@ -14,9 +14,27 @@ const generateId = (): string => {
   });
 };
 
-export type ToolType = 'select' | 'hand' | 'rectangle' | 'ellipse' | 'line' | 'text' | 'triangle' | 'star' | 'polygon';
+export type ToolType =
+  | 'select'
+  | 'hand'
+  | 'rectangle'
+  | 'ellipse'
+  | 'line'
+  | 'arrow'
+  | 'text'
+  | 'triangle'
+  | 'star'
+  | 'polygon';
 
-export type ShapeType = 'rectangle' | 'ellipse' | 'line' | 'text' | 'triangle' | 'star' | 'polygon';
+export type ShapeType =
+  | 'rectangle'
+  | 'ellipse'
+  | 'line'
+  | 'arrow'
+  | 'text'
+  | 'triangle'
+  | 'star'
+  | 'polygon';
 
 export interface TriangleProps {
   mode: 'equilateral' | 'isosceles' | 'scalene';
@@ -36,6 +54,15 @@ export interface PolygonProps {
   radius: number;
 }
 
+export type ArrowTailType = 'none' | 'line' | 'round';
+export type ArrowHeadType = 'triangle' | 'diamond' | 'circle';
+export interface ArrowProps {
+  tailType: ArrowTailType;
+  headType: ArrowHeadType;
+  headSize: number; // relative to stroke width
+  tailLength?: number; // used when tailType === 'line'
+}
+
 export interface CanvasObject {
   id: string;
   type: ShapeType | string;
@@ -52,6 +79,7 @@ export interface CanvasObject {
   triangle?: TriangleProps;
   star?: StarProps;
   polygon?: PolygonProps;
+  arrow?: ArrowProps;
   metadata: {
     createdAt: string;
     updatedAt: string;
@@ -95,6 +123,7 @@ interface EditorState {
   createRectangle: (x: number, y: number, width: number, height: number) => string;
   createEllipse: (x: number, y: number, width: number, height: number) => string;
   createLine: (x1: number, y1: number, x2: number, y2: number) => string;
+  createArrow: (x1: number, y1: number, x2: number, y2: number, arrow?: ArrowProps) => string;
   createText: (x: number, y: number, text: string) => string;
   createTriangle: (
     x: number,
@@ -120,6 +149,13 @@ interface EditorState {
     rotation?: number,
   ) => string;
   }
+
+const DEFAULT_ARROW: ArrowProps = {
+  tailType: 'none',
+  headType: 'triangle',
+  headSize: 2,
+  tailLength: 0,
+};
 
 const useEditorStore = create<EditorState>((set, get) => ({
   // Initial state
@@ -319,6 +355,26 @@ const useEditorStore = create<EditorState>((set, get) => ({
       stroke: '#6b7280',
       strokeWidth: 2,
       opacity: 1,
+    });
+  },
+  
+  createArrow: (x1, y1, x2, y2, arrow = DEFAULT_ARROW) => {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const length = Math.max(1, Math.hypot(dx, dy));
+    const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+    return get().addObject({
+      type: 'arrow',
+      x: x1,
+      y: y1,
+      width: length,
+      height: Math.max(1, arrow.headSize * 2),
+      rotation: angle,
+      fill: 'transparent',
+      stroke: '#6b7280',
+      strokeWidth: 2,
+      opacity: 1,
+      arrow,
     });
   },
   

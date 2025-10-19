@@ -4,6 +4,7 @@ import useEditorStore from '../../store/editorStore';
 import { TriangleSection } from './TriangleSection';
 import { StarSection } from './StarSection';
 import { PolygonSection } from './PolygonSection';
+import { ArrowSection } from './ArrowSection';
 
 export const PropertiesPanel: React.FC = () => {
   const { 
@@ -227,6 +228,10 @@ export const PropertiesPanel: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {singleSelection && selectedObjects[0].type === 'arrow' && (
+        <ArrowSection object={selectedObjects[0]} />
       )}
 
       {singleSelection && selectedObjects[0].type === 'triangle' && (
