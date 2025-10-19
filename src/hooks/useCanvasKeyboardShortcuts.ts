@@ -158,6 +158,12 @@ export const useCanvasKeyboardShortcuts = () => {
         setCanvasTool('select'); // Canvas store uses select for drawing
       }
 
+      if (event.code === 'KeyU') {
+        event.preventDefault();
+        setActiveTool('roundedRectangle');
+        setCanvasTool('select');
+      }
+
       if (event.code === 'KeyO') {
         event.preventDefault();
         setActiveTool('ellipse');

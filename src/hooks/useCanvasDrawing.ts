@@ -5,6 +5,7 @@ import useEditorStore, { ToolType } from '../store/editorStore';
 import { getTrianglePoints, resolveEquilateralSize } from '../utils/geometry/triangle';
 import { getStarPoints } from '../utils/geometry/star';
 import { getRegularPolygonPoints } from '../utils/geometry/polygon';
+import { buildRoundedRectPath, normalizeRadii } from '../utils/geometry/roundedRect';
 
 interface DrawingState {
   isDrawing: boolean;
@@ -16,6 +17,7 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
   const { 
     activeTool, 
     createRectangle, 
+    createRoundedRectangle,
     createEllipse, 
     createLine, 
     createText,
@@ -58,6 +60,21 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
           evented: false,
         });
         break;
+
+      case 'roundedRectangle': {
+        const path = new fabric.Path('M 0 0 L 0 0 Z', {
+          left: pointer.x,
+          top: pointer.y,
+          fill: 'rgba(59, 130, 246, 0.3)',
+          stroke: '#1d4ed8',
+          strokeWidth: 1,
+          selectable: false,
+          evented: false,
+          objectCaching: false,
+        });
+        previewObject = path as unknown as fabric.Object;
+        break;
+      }
 
       case 'ellipse':
         previewObject = new fabric.Ellipse({
@@ -144,7 +161,7 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
       canvas.add(previewObject);
       canvas.renderAll();
     }
-  }, [fabricCanvas, activeTool, createRectangle, createEllipse, createLine, createText, createTriangle, createStar, createPolygon]);
+  }, [fabricCanvas, activeTool, createRectangle, createRoundedRectangle, createEllipse, createLine, createText, createTriangle, createStar, createPolygon]);
 
   const handleMouseMove = useCallback((e: fabric.IEvent<MouseEvent>) => {
     const canvas = fabricCanvas.current;
@@ -162,7 +179,7 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
 
     // Handle shift constraints for perfect shapes
     if (isShiftPressed) {
-      if (activeTool === 'rectangle' || activeTool === 'ellipse') {
+      if (activeTool === 'rectangle' || activeTool === 'roundedRectangle' || activeTool === 'ellipse') {
         // Perfect square/circle
         const size = Math.max(Math.abs(width), Math.abs(height));
         width = width >= 0 ? size : -size;
@@ -187,6 +204,24 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
           height: Math.abs(height),
         });
         break;
+
+      case 'roundedRectangle': {
+        const left = width >= 0 ? startPoint.x : startPoint.x + width;
+        const top = height >= 0 ? startPoint.y : startPoint.y + height;
+        const w = Math.abs(width);
+        const h = Math.abs(height);
+        const radii = normalizeRadii(w, h, { radius: 12 });
+        const pathStr = buildRoundedRectPath(w, h, radii);
+        // Update existing path object
+        const newPath = new fabric.Path(pathStr);
+        (currentObject as any).set({
+          left,
+          top,
+          path: (newPath as any).path,
+        });
+        (currentObject as any).setCoords();
+        break;
+      }
 
       case 'ellipse':
         (currentObject as fabric.Ellipse).set({
@@ -284,7 +319,7 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
 
     // Apply shift constraints
     if (isShiftPressed) {
-      if (activeTool === 'rectangle' || activeTool === 'ellipse') {
+      if (activeTool === 'rectangle' || activeTool === 'roundedRectangle' || activeTool === 'ellipse') {
         const size = Math.max(Math.abs(width), Math.abs(height));
         width = width >= 0 ? size : -size;
         height = height >= 0 ? size : -size;
@@ -309,6 +344,9 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
       switch (activeTool) {
         case 'rectangle':
           createRectangle(finalX, finalY, finalWidth, finalHeight);
+          break;
+        case 'roundedRectangle':
+          createRoundedRectangle(finalX, finalY, finalWidth, finalHeight, { radius: 12 });
           break;
         case 'ellipse':
           createEllipse(finalX, finalY, finalWidth, finalHeight);
@@ -377,7 +415,7 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
     };
 
     canvas.renderAll();
-  }, [fabricCanvas, activeTool, createRectangle, createEllipse, createLine, createTriangle, createStar, createPolygon]);
+  }, [fabricCanvas, activeTool, createRectangle, createRoundedRectangle, createEllipse, createLine, createTriangle, createStar, createPolygon]);
 
   return {
     handleMouseDown,
