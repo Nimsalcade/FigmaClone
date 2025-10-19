@@ -2,7 +2,8 @@
 import { useEffect, useRef } from 'react';
 import { fabric } from 'fabric';
 import { createFabricObject, fabricToCanvasObject } from '../utils/fabricUtils';
-import useEditorStore, { CanvasObject } from '../store/editorStore';
+import { getTrianglePoints } from '../utils/geometry/triangle';
+import useEditorStore from '../store/editorStore';
 import { useCanvasDrawing } from './useCanvasDrawing';
 
 const useFabricCanvas = () => {
@@ -135,7 +136,7 @@ const useFabricCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const isDrawingTool = ['rectangle', 'ellipse', 'line', 'text'].includes(activeTool);
+    const isDrawingTool = ['rectangle', 'ellipse', 'line', 'text', 'triangle'].includes(activeTool);
     
     // Enable/disable selection based on tool
     canvas.selection = activeTool === 'select';
@@ -149,7 +150,8 @@ const useFabricCanvas = () => {
         case 'hand': return 'grab';
         case 'rectangle':
         case 'ellipse':
-        case 'line': return 'crosshair';
+        case 'line':
+        case 'triangle': return 'crosshair';
         case 'text': return 'text';
         default: return 'default';
       }
@@ -234,6 +236,15 @@ const useFabricCanvas = () => {
             text: storeObj.text || '',
             fill: storeObj.fill,
           });
+        } else if (fabricObj.type === 'polygon' && (fabricObj.get('data') as any)?.type === 'triangle') {
+          const poly = fabricObj as fabric.Polygon;
+          const mode = storeObj.triangle?.mode ?? 'isosceles';
+          const triWidth = storeObj.triangle?.base ?? storeObj.width;
+          const triHeight = storeObj.triangle?.height ?? storeObj.height;
+          // Build points relative to (0,0) bounding box
+          const points = getTrianglePoints({ width: triWidth, height: triHeight, mode, orientation: 'down' });
+          poly.set({ left: storeObj.x, top: storeObj.y } as any);
+          (poly as any).set({ points, fill: storeObj.fill, stroke: storeObj.stroke, strokeWidth: storeObj.strokeWidth });
         }
 
         fabricObj.setCoords();

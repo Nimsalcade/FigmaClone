@@ -1,6 +1,7 @@
 // src/utils/fabricUtils.ts
 import { fabric } from 'fabric';
 import { CanvasObject } from '../store/editorStore';
+import { getTrianglePoints, resolveEquilateralSize } from './geometry/triangle';
 
 // Generate UUID using crypto API
 const generateId = (): string => {
@@ -80,6 +81,24 @@ export const createFabricObject = (obj: CanvasObject): fabric.Object => {
         selectable: true,
       });
       break;
+
+    case 'triangle': {
+      const mode = obj.triangle?.mode ?? 'isosceles';
+      const triWidth = obj.triangle?.base ?? width;
+      const triHeight = obj.triangle?.height ?? height;
+      const points = getTrianglePoints({ width: triWidth, height: triHeight, mode, orientation: 'down' });
+      fabricObj = new fabric.Polygon(points as any, {
+        left: x,
+        top: y,
+        fill,
+        stroke,
+        strokeWidth,
+        opacity,
+        angle: rotation,
+        selectable: true,
+      });
+      break;
+    }
       
     default:
       fabricObj = new FabricClass({
@@ -101,7 +120,8 @@ export const createFabricObject = (obj: CanvasObject): fabric.Object => {
     id,
     type,
     createdAt: obj.metadata.createdAt,
-    createdBy: obj.metadata.createdBy
+    createdBy: obj.metadata.createdBy,
+    triangle: obj.triangle,
   });
   
   return fabricObj;
@@ -110,23 +130,50 @@ export const createFabricObject = (obj: CanvasObject): fabric.Object => {
 // Convert Fabric object back to our CanvasObject format
 export const fabricToCanvasObject = (fabricObj: fabric.Object): CanvasObject => {
   const data = fabricObj.get('data') || {};
-  const baseProps = {
-    id: data.id || generateId(),
-    type: data.type || 'rectangle',
-    x: fabricObj.left || 0,
-    y: fabricObj.top || 0,
-    width: (fabricObj as any).width || (fabricObj as any).getScaledWidth?.() || 0,
-    height: (fabricObj as any).height || (fabricObj as any).getScaledHeight?.() || 0,
-    rotation: fabricObj.angle || 0,
+  const rawWidth = (fabricObj as any).width || (fabricObj as any).getScaledWidth?.() || 0;
+  const rawHeight = (fabricObj as any).height || (fabricObj as any).getScaledHeight?.() || 0;
+
+  let x = fabricObj.left || 0;
+  let y = fabricObj.top || 0;
+  let width = rawWidth;
+  let height = rawHeight;
+
+  let triangle = data.triangle as CanvasObject['triangle'] | undefined;
+
+  if (data.type === 'triangle') {
+    const mode = (triangle?.mode ?? 'isosceles') as 'equilateral' | 'isosceles' | 'scalene';
+    if (mode === 'equilateral') {
+      const { base, height: h } = resolveEquilateralSize(width, height);
+      const cx = x + width / 2;
+      const cy = y + height / 2;
+      width = base;
+      height = h;
+      x = cx - width / 2;
+      y = cy - height / 2;
+      triangle = { mode, base: width, height };
+    } else {
+      triangle = { mode, base: width, height };
+    }
+  }
+
+  const baseProps: CanvasObject = {
+    id: (data as any).id || generateId(),
+    type: (data as any).type || 'rectangle',
+    x,
+    y,
+    width,
+    height,
+    rotation: (fabricObj as any).angle || 0,
     fill: (fabricObj as any).fill || '#000000',
     stroke: (fabricObj as any).stroke || '',
     strokeWidth: (fabricObj as any).strokeWidth || 0,
-    opacity: fabricObj.opacity ?? 1,
+    opacity: (fabricObj as any).opacity ?? 1,
     text: (fabricObj as any).text,
+    triangle,
     metadata: {
-      createdAt: data.createdAt || new Date().toISOString(),
+      createdAt: (data as any).createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      createdBy: data.createdBy || 'user',
+      createdBy: (data as any).createdBy || 'user',
     },
   };
   
