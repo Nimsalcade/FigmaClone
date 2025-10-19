@@ -1,6 +1,7 @@
 // src/components/PropertiesPanel/PropertiesPanel.tsx
 import React, { useCallback } from 'react';
 import useEditorStore from '../../store/editorStore';
+import { TriangleSection } from './TriangleSection';
 
 export const PropertiesPanel: React.FC = () => {
   const { 
@@ -224,6 +225,10 @@ export const PropertiesPanel: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {singleSelection && selectedObjects[0].type === 'triangle' && (
+        <TriangleSection object={selectedObjects[0]} />
       )}
 
       {/* Object Info Section */}

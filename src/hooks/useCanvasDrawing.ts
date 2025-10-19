@@ -2,6 +2,7 @@
 import { useCallback, useRef } from 'react';
 import { fabric } from 'fabric';
 import useEditorStore, { ToolType } from '../store/editorStore';
+import { getTrianglePoints, resolveEquilateralSize } from '../utils/geometry/triangle';
 
 interface DrawingState {
   isDrawing: boolean;
@@ -15,7 +16,8 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
     createRectangle, 
     createEllipse, 
     createLine, 
-    createText 
+    createText,
+    createTriangle,
   } = useEditorStore();
   
   const drawingState = useRef<DrawingState>({
@@ -76,6 +78,24 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
         });
         break;
 
+      case 'triangle': {
+        const poly = new fabric.Polygon([
+          { x: 0, y: 0 },
+          { x: 0, y: 0 },
+          { x: 0, y: 0 },
+        ] as any, {
+          left: pointer.x,
+          top: pointer.y,
+          fill: 'rgba(245, 158, 11, 0.3)',
+          stroke: '#b45309',
+          strokeWidth: 1,
+          selectable: false,
+          evented: false,
+        });
+        previewObject = poly as unknown as fabric.Object;
+        break;
+      }
+
       case 'text':
         // For text, we create immediately and don't need preview
         const textId = createText(pointer.x, pointer.y, 'Click to edit');
@@ -88,7 +108,7 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
       canvas.add(previewObject);
       canvas.renderAll();
     }
-  }, [fabricCanvas, activeTool, createRectangle, createEllipse, createLine, createText]);
+  }, [fabricCanvas, activeTool, createRectangle, createEllipse, createLine, createText, createTriangle]);
 
   const handleMouseMove = useCallback((e: fabric.IEvent<MouseEvent>) => {
     const canvas = fabricCanvas.current;
@@ -147,6 +167,20 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
           y2: startPoint.y + height,
         });
         break;
+
+      case 'triangle': {
+        const left = width >= 0 ? startPoint.x : startPoint.x + width;
+        const top = height >= 0 ? startPoint.y : startPoint.y + height;
+        const w = Math.abs(width);
+        const h = Math.abs(height);
+        const orientation = height >= 0 ? 'down' : 'up';
+        const mode = isShiftPressed ? 'equilateral' : 'isosceles';
+        const points = getTrianglePoints({ width: w, height: h, mode, orientation });
+        (currentObject as fabric.Polygon).set({ left, top } as any);
+        (currentObject as any).set({ points });
+        (currentObject as any).setCoords();
+        break;
+      }
     }
 
     canvas.renderAll();
@@ -206,6 +240,23 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
         case 'line':
           createLine(startPoint.x, startPoint.y, startPoint.x + width, startPoint.y + height);
           break;
+        case 'triangle': {
+          const mode = isShiftPressed ? 'equilateral' : 'isosceles';
+          let triWidth = finalWidth;
+          let triHeight = finalHeight;
+          if (mode === 'equilateral') {
+            const { base, height: h } = resolveEquilateralSize(finalWidth, finalHeight);
+            // Center the equilateral triangle within the drag rectangle
+            const dx = (finalWidth - base) / 2;
+            const dy = (finalHeight - h) / 2;
+            triWidth = base;
+            triHeight = h;
+            createTriangle(finalX + dx, finalY + dy, triWidth, triHeight, { mode, base: triWidth, height: triHeight });
+          } else {
+            createTriangle(finalX, finalY, triWidth, triHeight, { mode, base: triWidth, height: triHeight });
+          }
+          break;
+        }
       }
     }
 
@@ -217,7 +268,7 @@ export const useCanvasDrawing = (fabricCanvas: React.RefObject<fabric.Canvas>) =
     };
 
     canvas.renderAll();
-  }, [fabricCanvas, activeTool, createRectangle, createEllipse, createLine]);
+  }, [fabricCanvas, activeTool, createRectangle, createEllipse, createLine, createTriangle]);
 
   return {
     handleMouseDown,

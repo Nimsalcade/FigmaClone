@@ -1,5 +1,6 @@
 // src/store/editorStore.ts
 import { create } from 'zustand';
+import { registerHistorySlice, useHistoryStore } from './historyStore';
 
 // Generate UUID using crypto API  
 const generateId = (): string => {
@@ -13,11 +14,19 @@ const generateId = (): string => {
   });
 };
 
-export type ToolType = 'select' | 'hand' | 'rectangle' | 'ellipse' | 'line' | 'text';
+export type ToolType = 'select' | 'hand' | 'rectangle' | 'ellipse' | 'line' | 'text' | 'triangle';
+
+export type ShapeType = 'rectangle' | 'ellipse' | 'line' | 'text' | 'triangle';
+
+export interface TriangleProps {
+  mode: 'equilateral' | 'isosceles' | 'scalene';
+  base: number;
+  height: number;
+}
 
 export interface CanvasObject {
   id: string;
-  type: string;
+  type: ShapeType | string;
   x: number;
   y: number;
   width: number;
@@ -28,6 +37,7 @@ export interface CanvasObject {
   strokeWidth: number;
   opacity: number;
   text?: string;
+  triangle?: TriangleProps;
   metadata: {
     createdAt: string;
     updatedAt: string;
@@ -72,6 +82,13 @@ interface EditorState {
   createEllipse: (x: number, y: number, width: number, height: number) => string;
   createLine: (x1: number, y1: number, x2: number, y2: number) => string;
   createText: (x: number, y: number, text: string) => string;
+  createTriangle: (
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    triangle: TriangleProps,
+  ) => string;
 }
 
 const useEditorStore = create<EditorState>((set, get) => ({
@@ -106,6 +123,7 @@ const useEditorStore = create<EditorState>((set, get) => ({
       },
     }));
     
+    useHistoryStore.getState().record('Add object');
     return id;
   },
   
@@ -128,6 +146,7 @@ const useEditorStore = create<EditorState>((set, get) => ({
         },
       };
     });
+    useHistoryStore.getState().record('Update object');
   },
   
   deleteObject: (id) => {
@@ -139,10 +158,18 @@ const useEditorStore = create<EditorState>((set, get) => ({
         selectedObjectIds: state.selectedObjectIds.filter((objId) => objId !== id),
       };
     });
+    useHistoryStore.getState().record('Delete object');
   },
   
-  selectObjects: (ids) => set({ selectedObjectIds: [...new Set(ids)] }),
-  clearSelection: () => set({ selectedObjectIds: [] }),
+  selectObjects: (ids) => {
+    const unique = [...new Set(ids)];
+    set({ selectedObjectIds: unique });
+    useHistoryStore.getState().record('Select objects', { batchKey: 'selection' });
+  },
+  clearSelection: () => {
+    set({ selectedObjectIds: [] });
+    useHistoryStore.getState().record('Clear selection', { batchKey: 'selection' });
+  },
   setViewport: (zoom, pan) => set({ zoom, pan }),
 
   // Object manipulation methods
@@ -157,6 +184,7 @@ const useEditorStore = create<EditorState>((set, get) => ({
         selectedObjectIds: [],
       };
     });
+    useHistoryStore.getState().record('Delete selected');
   },
 
   duplicateSelected: () => {
@@ -178,6 +206,7 @@ const useEditorStore = create<EditorState>((set, get) => ({
     if (duplicatedIds.length > 0) {
       get().selectObjects(duplicatedIds);
     }
+    useHistoryStore.getState().record('Duplicate objects');
   },
 
   copySelected: () => {
@@ -207,12 +236,14 @@ const useEditorStore = create<EditorState>((set, get) => ({
     if (pastedIds.length > 0) {
       get().selectObjects(pastedIds);
     }
+    useHistoryStore.getState().record('Paste objects');
   },
 
   selectAll: () => {
     const state = get();
     const allIds = Object.keys(state.canvasObjects);
     set({ selectedObjectIds: allIds });
+    useHistoryStore.getState().record('Select all', { batchKey: 'selection' });
   },
   
   // Shape creation helpers
@@ -276,6 +307,43 @@ const useEditorStore = create<EditorState>((set, get) => ({
       text,
     });
   },
+
+  createTriangle: (x, y, width, height, triangle) => {
+    return get().addObject({
+      type: 'triangle',
+      x,
+      y,
+      width,
+      height,
+      rotation: 0,
+      fill: '#f59e0b',
+      stroke: '#b45309',
+      strokeWidth: 1,
+      opacity: 1,
+      triangle,
+    });
+  },
 }));
+
+// History integration for objects and selection
+registerHistorySlice<Record<string, CanvasObject>>('objects', {
+  capture: () => ({ ...useEditorStore.getState().canvasObjects }),
+  apply: (snapshot) => {
+    useEditorStore.setState((state) => ({
+      ...state,
+      canvasObjects: { ...(snapshot as Record<string, CanvasObject>) },
+    }));
+  },
+});
+
+registerHistorySlice<string[]>('selection', {
+  capture: () => [...useEditorStore.getState().selectedObjectIds],
+  apply: (snapshot) => {
+    useEditorStore.setState((state) => ({
+      ...state,
+      selectedObjectIds: [...(snapshot as string[])],
+    }));
+  },
+});
 
 export default useEditorStore;
