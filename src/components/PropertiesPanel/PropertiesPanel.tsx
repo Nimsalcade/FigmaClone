@@ -3,6 +3,7 @@ import React, { useCallback } from 'react';
 import useEditorStore from '../../store/editorStore';
 import { TriangleSection } from './TriangleSection';
 import { StarSection } from './StarSection';
+import { PolygonSection } from './PolygonSection';
 
 export const PropertiesPanel: React.FC = () => {
   const { 
@@ -234,6 +235,10 @@ export const PropertiesPanel: React.FC = () => {
 
       {singleSelection && selectedObjects[0].type === 'star' && (
         <StarSection object={selectedObjects[0]} />
+      )}
+
+      {singleSelection && selectedObjects[0].type === 'polygon' && (
+        <PolygonSection object={selectedObjects[0]} />
       )}
 
       {/* Object Info Section */}

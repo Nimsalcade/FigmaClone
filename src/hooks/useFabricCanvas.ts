@@ -4,6 +4,7 @@ import { fabric } from 'fabric';
 import { createFabricObject, fabricToCanvasObject } from '../utils/fabricUtils';
 import { getTrianglePoints } from '../utils/geometry/triangle';
 import { getStarPoints } from '../utils/geometry/star';
+import { getRegularPolygonPoints } from '../utils/geometry/polygon';
 import useEditorStore from '../store/editorStore';
 import { useCanvasDrawing } from './useCanvasDrawing';
 
@@ -137,7 +138,7 @@ const useFabricCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    const isDrawingTool = ['rectangle', 'ellipse', 'line', 'text', 'triangle', 'star'].includes(activeTool);
+    const isDrawingTool = ['rectangle', 'ellipse', 'line', 'text', 'triangle', 'star', 'polygon'].includes(activeTool);
     
     // Enable/disable selection based on tool
     canvas.selection = activeTool === 'select';
@@ -153,7 +154,8 @@ const useFabricCanvas = () => {
         case 'ellipse':
         case 'line':
         case 'triangle':
-        case 'star': return 'crosshair';
+        case 'star':
+        case 'polygon': return 'crosshair';
         case 'text': return 'text';
         default: return 'default';
       }
@@ -253,6 +255,13 @@ const useFabricCanvas = () => {
           const outerR = storeObj.star?.outerRadius ?? Math.min(storeObj.width, storeObj.height) / 2;
           const innerR = storeObj.star?.innerRadius ?? outerR / 2;
           const pts = getStarPoints({ points: pointsCount, innerRadius: innerR, outerRadius: outerR, rotation: -Math.PI / 2 });
+          poly.set({ left: storeObj.x, top: storeObj.y } as any);
+          (poly as any).set({ points: pts, fill: storeObj.fill, stroke: storeObj.stroke, strokeWidth: storeObj.strokeWidth });
+        } else if (fabricObj.type === 'polygon' && (fabricObj.get('data') as any)?.type === 'polygon') {
+          const poly = fabricObj as fabric.Polygon;
+          const sides = Math.max(3, Math.min(12, (storeObj as any).polygon?.sides ?? 6));
+          const radius = (storeObj as any).polygon?.radius ?? Math.min(storeObj.width, storeObj.height) / 2;
+          const pts = getRegularPolygonPoints({ sides, radius, rotation: -Math.PI / 2 });
           poly.set({ left: storeObj.x, top: storeObj.y } as any);
           (poly as any).set({ points: pts, fill: storeObj.fill, stroke: storeObj.stroke, strokeWidth: storeObj.strokeWidth });
         }
