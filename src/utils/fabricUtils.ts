@@ -4,7 +4,7 @@ import { CanvasObject } from '../store/editorStore';
 import { getTrianglePoints, resolveEquilateralSize } from './geometry/triangle';
 import { getStarPoints, ratioFromRadii } from './geometry/star';
 import { getRegularPolygonPoints } from './geometry/polygon';
-import { buildRoundedRectPath, normalizeRadii, scaleCornerRadii } from './geometry/roundedRect';
+import { computeArrowShapeSpec, DEFAULT_ARROW_OPTIONS } from './geometry/arrow';
 
 // Generate UUID using crypto API
 const generateId = (): string => {
@@ -139,25 +139,92 @@ export const createFabricObject = (obj: CanvasObject): fabric.Object => {
       break;
     }
 
-    case 'roundedRectangle': {
-      const rr = obj.roundedRectangle ?? { radius: 12 };
-      const radii = normalizeRadii(width, height, {
-        radius: rr.radius ?? 12,
-        radii: rr.radii,
+    case 'arrow': {
+      const arrow = (obj as any).arrow || DEFAULT_ARROW_OPTIONS;
+      const spec = computeArrowShapeSpec(Math.max(1, width), Math.max(0.5, strokeWidth), arrow);
+      const parts: fabric.Object[] = [];
+
+      const shaft = new fabric.Line([spec.shaft.x1, spec.shaft.y1, spec.shaft.x2, spec.shaft.y2], {
+        stroke: stroke || '#6b7280',
+        strokeWidth: Math.max(0.5, strokeWidth || 2),
+        selectable: false,
+        evented: false,
       });
-      const pathStr = buildRoundedRectPath(width, height, radii);
-      const path = new fabric.Path(pathStr, {
+      (shaft as any).set('data', { role: 'shaft' });
+      parts.push(shaft);
+
+      if (spec.head.type === 'polygon' && spec.head.polygon) {
+        const head = new fabric.Polygon(spec.head.polygon.points as any, {
+          fill: stroke || '#6b7280',
+          stroke: 'transparent',
+          selectable: false,
+          evented: false,
+        });
+        (head as any).set('data', { role: 'head' });
+        parts.push(head);
+      } else if (spec.head.type === 'circle' && spec.head.circle) {
+        const head = new fabric.Circle({
+          left: spec.head.circle.cx - spec.head.circle.r,
+          top: spec.head.circle.cy - spec.head.circle.r,
+          radius: spec.head.circle.r,
+          fill: stroke || '#6b7280',
+          selectable: false,
+          evented: false,
+          originX: 'left',
+          originY: 'top',
+        });
+        (head as any).set('data', { role: 'head' });
+        parts.push(head);
+      }
+
+      if (spec.tail) {
+        if (spec.tail.type === 'line' && spec.tail.line) {
+          const tail = new fabric.Line(
+            [spec.tail.line.x1, spec.tail.line.y1, spec.tail.line.x2, spec.tail.line.y2],
+            {
+              stroke: stroke || '#6b7280',
+              strokeWidth: Math.max(0.5, strokeWidth || 2),
+              selectable: false,
+              evented: false,
+            },
+          );
+          (tail as any).set('data', { role: 'tail' });
+          parts.push(tail);
+        } else if (spec.tail.type === 'circle' && spec.tail.circle) {
+          const tail = new fabric.Circle({
+            left: spec.tail.circle.cx - spec.tail.circle.r,
+            top: spec.tail.circle.cy - spec.tail.circle.r,
+            radius: spec.tail.circle.r,
+            fill: stroke || '#6b7280',
+            selectable: false,
+            evented: false,
+            originX: 'left',
+            originY: 'top',
+          });
+          (tail as any).set('data', { role: 'tail' });
+          parts.push(tail);
+        }
+      }
+
+      const group = new fabric.Group(parts, {
         left: x,
         top: y,
-        fill,
-        stroke,
-        strokeWidth,
+        angle: rotation || 0,
         opacity,
-        angle: rotation,
         selectable: true,
-        objectCaching: false,
       });
-      fabricObj = path as unknown as fabric.Object;
+
+      (group as any).set({ stroke: stroke || '#6b7280', strokeWidth: Math.max(0.5, strokeWidth || 2), fill: fill ?? 'transparent' });
+
+      group.set('data', {
+        id,
+        type,
+        createdAt: obj.metadata.createdAt,
+        createdBy: obj.metadata.createdBy,
+        arrow: arrow,
+      });
+
+      fabricObj = group as unknown as fabric.Object;
       break;
     }
 
@@ -177,17 +244,17 @@ export const createFabricObject = (obj: CanvasObject): fabric.Object => {
     }
 
     // Store our internal ID for reference
-    fabricObj.set('data', {
-    id,
-    type,
-    createdAt: obj.metadata.createdAt,
-    createdBy: obj.metadata.createdBy,
-    triangle: obj.triangle,
-    star: obj.star,
-    polygon: (obj as any).polygon,
-    roundedRectangle: (obj as any).roundedRectangle,
-    dimensions: { width, height },
-    });
+    if (type !== 'arrow') {
+      fabricObj.set('data', {
+        id,
+        type,
+        createdAt: obj.metadata.createdAt,
+        createdBy: obj.metadata.createdBy,
+        triangle: (obj as any).triangle,
+        star: (obj as any).star,
+        polygon: (obj as any).polygon,
+      });
+    }
 
     return fabricObj;
     };
@@ -203,11 +270,12 @@ export const fabricToCanvasObject = (fabricObj: fabric.Object): CanvasObject => 
   let width = rawWidth;
   let height = rawHeight;
 
-  let triangle = data.triangle as CanvasObject['triangle'] | undefined;
-  let star = data.star as CanvasObject['star'] | undefined;
+  let triangle = (data as any).triangle as CanvasObject['triangle'] | undefined;
+  let star = (data as any).star as CanvasObject['star'] | undefined;
   let polygon = (data as any).polygon as CanvasObject['polygon'] | undefined;
+  let arrow = (data as any).arrow as CanvasObject['arrow'] | undefined;
 
-  if (data.type === 'triangle') {
+  if ((data as any).type === 'triangle') {
     const mode = (triangle?.mode ?? 'isosceles') as 'equilateral' | 'isosceles' | 'scalene';
     if (mode === 'equilateral') {
       const { base, height: h } = resolveEquilateralSize(width, height);
@@ -223,7 +291,7 @@ export const fabricToCanvasObject = (fabricObj: fabric.Object): CanvasObject => 
     }
   }
 
-  if (data.type === 'star') {
+  if ((data as any).type === 'star') {
     const pointsCount = Math.max(5, Math.min(12, (star?.points ?? 5) | 0));
     const ratio = star ? ratioFromRadii(star.innerRadius, star.outerRadius) : 0.5;
     const outerR = Math.max(1, Math.min(width, height) / 2);
@@ -242,7 +310,7 @@ export const fabricToCanvasObject = (fabricObj: fabric.Object): CanvasObject => 
     };
   }
 
-  if (data.type === 'polygon') {
+  if ((data as any).type === 'polygon') {
     const sides = Math.max(3, Math.min(12, ((polygon?.sides ?? 6) as number) | 0));
     const r = polygon?.radius ?? Math.min(width, height) / 2;
     const cx = x + width / 2;
@@ -254,21 +322,9 @@ export const fabricToCanvasObject = (fabricObj: fabric.Object): CanvasObject => 
     polygon = { sides, radius: r };
   }
 
-  let roundedRectangle = (data as any).roundedRectangle as CanvasObject['roundedRectangle'] | undefined;
-  if (data.type === 'roundedRectangle') {
-    const prevDims = (data as any).dimensions as { width: number; height: number } | undefined;
-    const prevWidth = prevDims?.width || width || 1;
-    const prevHeight = prevDims?.height || height || 1;
-    const scale = Math.min(width / Math.max(1, prevWidth), height / Math.max(1, prevHeight));
-    const prevProps = roundedRectangle ?? { radius: 12 };
-    const prevCorner = normalizeRadii(prevWidth, prevHeight, {
-      radius: prevProps.radius ?? 12,
-      radii: prevProps.radii,
-    });
-    const scaledCorner = scaleCornerRadii(prevCorner, scale);
-    const baseRadius = Math.max(0, (prevProps.radius ?? 12) * scale);
-    const norm = normalizeRadii(width, height, { radius: baseRadius, radii: scaledCorner });
-    roundedRectangle = { radius: baseRadius, radii: norm };
+  // Arrow uses group's bbox; keep arrow options as-is
+  if ((data as any).type === 'arrow') {
+    arrow = (data as any).arrow || undefined;
   }
 
   const baseProps: CanvasObject = {
@@ -287,7 +343,7 @@ export const fabricToCanvasObject = (fabricObj: fabric.Object): CanvasObject => 
     triangle,
     star,
     polygon,
-    roundedRectangle,
+    arrow,
     metadata: {
       createdAt: (data as any).createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
