@@ -5,6 +5,7 @@ import { createFabricObject, fabricToCanvasObject } from '../utils/fabricUtils';
 import { getTrianglePoints } from '../utils/geometry/triangle';
 import { getStarPoints } from '../utils/geometry/star';
 import { getRegularPolygonPoints } from '../utils/geometry/polygon';
+import { buildRoundedRectPath, normalizeRadii } from '../utils/geometry/roundedRect';
 import useEditorStore from '../store/editorStore';
 import { useCanvasDrawing } from './useCanvasDrawing';
 import { computeArrowShapeSpec, DEFAULT_ARROW_OPTIONS } from '../utils/geometry/arrow';
@@ -152,6 +153,7 @@ const useFabricCanvas = () => {
       switch (tool) {
         case 'hand': return 'grab';
         case 'rectangle':
+        case 'roundedRectangle':
         case 'ellipse':
         case 'line':
         case 'arrow':

@@ -246,6 +246,10 @@ export const PropertiesPanel: React.FC = () => {
         <PolygonSection object={selectedObjects[0]} />
       )}
 
+      {singleSelection && selectedObjects[0].type === 'roundedRectangle' && (
+        <RoundedRectSection object={selectedObjects[0]} />
+      )}
+
       {/* Object Info Section */}
       <div className="border-t border-gray-200 pt-4">
         <h3 className="text-xs font-medium text-gray-600 uppercase tracking-wider mb-3">
