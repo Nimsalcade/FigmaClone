@@ -1,0 +1,55 @@
+task1
+tittle: Implement persistence via localStorage including project serialization utilities, versioning, auto-save every 30s, load-on-start, and last-saved timestamp display. Create useAutoSave hook and ensure manual save/load triggers from menu use shared utilities.
+describtion: 1. Develop utils/storage.ts to serialize/deserialize ProjectState with version metadata and migration hooks for future schema changes.
+2. Implement useAutoSave hook that debounces state snapshots, writes to localStorage every 30s (when dirty), and exposes lastSaved timestamp via editorStore.
+3. Load persisted project on app init (with fallback to defaults) and populate stores/canvas accordingly.
+4. Wire manual Save/Load commands in TopMenu to use storage utils and update UI status.
+5. Display last saved timestamp in UI (e.g., status bar or menu) and handle error states (storage unavailable) with user feedback.
+
+
+task2
+tittle: Build the top menu bar with File/Edit/View sections housing commands for new project, load, save, undo/redo, zoom controls (+/-, fit, 100%), and grid toggle. Ensure commands integrate with existing stores and expose keyboard shortcuts in menu labels.
+describtion: Implement TopMenu component with dropdown menus or accessible menubar pattern linking to editor/canvas/history actions.
+Wire menu commands: new project (clear state), save/load triggers (to be implemented in persistence ticket), undo/redo (historyStore), zoom in/out/fit/100%, grid toggle, and export placeholder entry.
+Display keyboard shortcuts alongside menu items and ensure activation via keyboard navigation per ARIA menu guidelines.
+Reflect disabled states when actions unavailable (e.g., undo stack empty).
+Style menu consistent with desktop app aesthetic and integrate into AppLayout.
+
+task3:
+tittle: Implement the Layers Panel with list rendering of CanvasObjects, visibility/lock toggles, drag-and-drop reordering (affecting z-index), inline renaming, multi-select, and a context menu for duplicate/delete actions.
+describtion: Render layers list sorted by z-index with draggable handles using accessible drag-drop library or custom logic; update canvasStore order and Fabric stacking on drop.
+Provide visibility and lock toggles synced to Fabric object state and canvasStore metadata.
+Support multi-select via keyboard modifiers and keep list selection in sync with canvas selection.
+Enable inline renaming with validation and enter/escape handling.
+Add context menu (right-click) for layer-level actions (duplicate, delete, move up/down) respecting keyboard accessibility.
+
+task4:
+tittle:  Develop the Properties Panel with grouped controls for transform, appearance, and text attributes. Support multi-selection by showing shared values, live updates to Fabric objects, input validation, and color pickers via react-colorful
+
+describtion: Build PropertiesPanel component with sections for position/size/rotation, fill/stroke (color pickers, stroke width), opacity, typography (font family/size/style/alignment).
+Implement form state that derives shared values for multi-select and shows mixed-state indicators when values differ.
+Validate numeric inputs (e.g., clamped width/height, rotation degrees) and push updates immediately to Fabric objects and canvasStore.
+Add react-colorful color pickers with proper popover handling and keyboard accessibility.
+Ensure panel reflects selection changes promptly and handles no-selection state gracefully.
+
+task5:
+tittle: Provide robust selection and manipulation features: single/multi-select, bounding boxes with 8 resize handles, rotation handle, move, duplicate, copy/paste, delete, and select-all. Integrate keyboard shortcuts and clipboard buffer via editorStore.
+
+describtion: Provide robust selection and manipulation features: single/multi-select, bounding boxes with 8 resize handles, rotation handle, move, duplicate, copy/paste, delete, and select-all. Integrate keyboard shortcuts and clipboard buffer via editorStore.
+
+task6:
+tittle: Implement drawing interactions for rectangle, ellipse/circle, line, and text tools on the Fabric canvas. Ensure new objects use default styles, generate UUIDs, and register in canvasStore with undo checkpoint hooks wired (placeholder for history integration).
+describtion:Create hook (e.g., useCanvasInteractions) to manage pointer events during drawing based on active ToolType from editorStore.
+For each shape type, translate pointer drag into Fabric object creation with default fill/stroke/text values from constants.
+Normalize Fabric objects into CanvasObject models saved via canvasStore and attach meta (id, createdAt).
+Ensure shift-modifier constraints (e.g., perfect circle, 45° line) and live shape preview during drawing.
+Add basic validation for text tool (prompt inline editing or default placeholder text) and hand off focus to properties panel when created
+
+TASK7:
+tittle: Build the toolbar UI with tool groups, lucide icons, and tool switching logic. Integrate with editorStore to manage active tool, grid toggle, and zoom shortcut buttons while supporting keyboard focus and ARIA labeling.
+
+describtion: Implement Toolbar component with grouped buttons for selection, shape tools, text, hand/pan, and utility toggles (grid, zoom in/out, fit, 100%).
+Connect toolbar buttons to editorStore actions to switch ToolType and to canvasStore for viewport controls.
+Apply accessible roles, aria-pressed, and keyboard navigation among toolbar buttons.
+Include tooltip or title attributes for keyboard shortcut hints.
+Style toolbar with Tailwind ensuring desktop layout compatibility with AppLayout.
