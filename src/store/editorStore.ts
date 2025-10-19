@@ -14,14 +14,21 @@ const generateId = (): string => {
   });
 };
 
-export type ToolType = 'select' | 'hand' | 'rectangle' | 'ellipse' | 'line' | 'text' | 'triangle';
+export type ToolType = 'select' | 'hand' | 'rectangle' | 'ellipse' | 'line' | 'text' | 'triangle' | 'star';
 
-export type ShapeType = 'rectangle' | 'ellipse' | 'line' | 'text' | 'triangle';
+export type ShapeType = 'rectangle' | 'ellipse' | 'line' | 'text' | 'triangle' | 'star';
 
 export interface TriangleProps {
   mode: 'equilateral' | 'isosceles' | 'scalene';
   base: number;
   height: number;
+}
+
+export interface StarProps {
+  points: number; // 5–12
+  innerRadius: number;
+  outerRadius: number;
+  smooth?: boolean;
 }
 
 export interface CanvasObject {
@@ -38,6 +45,7 @@ export interface CanvasObject {
   opacity: number;
   text?: string;
   triangle?: TriangleProps;
+  star?: StarProps;
   metadata: {
     createdAt: string;
     updatedAt: string;
@@ -88,6 +96,15 @@ interface EditorState {
     width: number,
     height: number,
     triangle: TriangleProps,
+  ) => string;
+  createStar: (
+    x: number,
+    y: number,
+    outerRadius: number,
+    innerRadius: number,
+    points: number,
+    rotation?: number,
+    smooth?: boolean,
   ) => string;
 }
 
@@ -321,6 +338,31 @@ const useEditorStore = create<EditorState>((set, get) => ({
       strokeWidth: 1,
       opacity: 1,
       triangle,
+    });
+  },
+
+  createStar: (x, y, outerRadius, innerRadius, points, rotation = 0, smooth = false) => {
+    const size = Math.max(1, Math.round(outerRadius * 2));
+    const clampedPoints = Math.max(5, Math.min(12, Math.floor(points)));
+    const outer = Math.max(1, outerRadius);
+    const inner = Math.max(1, Math.min(innerRadius, outer));
+    return get().addObject({
+      type: 'star',
+      x,
+      y,
+      width: size,
+      height: size,
+      rotation,
+      fill: '#fde047',
+      stroke: '#ca8a04',
+      strokeWidth: 1,
+      opacity: 1,
+      star: {
+        points: clampedPoints,
+        innerRadius: inner,
+        outerRadius: outer,
+        smooth,
+      },
     });
   },
 }));

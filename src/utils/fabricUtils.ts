@@ -2,6 +2,7 @@
 import { fabric } from 'fabric';
 import { CanvasObject } from '../store/editorStore';
 import { getTrianglePoints, resolveEquilateralSize } from './geometry/triangle';
+import { getStarPoints, ratioFromRadii } from './geometry/star';
 
 // Generate UUID using crypto API
 const generateId = (): string => {
@@ -99,7 +100,26 @@ export const createFabricObject = (obj: CanvasObject): fabric.Object => {
       });
       break;
     }
-      
+
+    case 'star': {
+      const pointsCount = Math.max(5, Math.min(12, obj.star?.points ?? 5));
+      const outerR = obj.star?.outerRadius ?? Math.min(width, height) / 2;
+      const innerR = obj.star?.innerRadius ?? outerR / 2;
+      const rotationOffset = -Math.PI / 2; // face up
+      const rel = getStarPoints({ points: pointsCount, innerRadius: innerR, outerRadius: outerR, rotation: rotationOffset });
+      fabricObj = new fabric.Polygon(rel as any, {
+        left: x,
+        top: y,
+        fill,
+        stroke,
+        strokeWidth,
+        opacity,
+        angle: rotation,
+        selectable: true,
+      });
+      break;
+    }
+
     default:
       fabricObj = new FabricClass({
         left: x,
@@ -113,19 +133,20 @@ export const createFabricObject = (obj: CanvasObject): fabric.Object => {
         angle: rotation,
         selectable: true,
       });
-  }
-  
-  // Store our internal ID for reference
-  fabricObj.set('data', { 
+    }
+
+    // Store our internal ID for reference
+    fabricObj.set('data', {
     id,
     type,
     createdAt: obj.metadata.createdAt,
     createdBy: obj.metadata.createdBy,
     triangle: obj.triangle,
-  });
-  
-  return fabricObj;
-};
+    star: obj.star,
+    });
+
+    return fabricObj;
+    };
 
 // Convert Fabric object back to our CanvasObject format
 export const fabricToCanvasObject = (fabricObj: fabric.Object): CanvasObject => {
@@ -139,6 +160,7 @@ export const fabricToCanvasObject = (fabricObj: fabric.Object): CanvasObject => 
   let height = rawHeight;
 
   let triangle = data.triangle as CanvasObject['triangle'] | undefined;
+  let star = data.star as CanvasObject['star'] | undefined;
 
   if (data.type === 'triangle') {
     const mode = (triangle?.mode ?? 'isosceles') as 'equilateral' | 'isosceles' | 'scalene';
@@ -156,6 +178,25 @@ export const fabricToCanvasObject = (fabricObj: fabric.Object): CanvasObject => 
     }
   }
 
+  if (data.type === 'star') {
+    const pointsCount = Math.max(5, Math.min(12, (star?.points ?? 5) | 0));
+    const ratio = star ? ratioFromRadii(star.innerRadius, star.outerRadius) : 0.5;
+    const outerR = Math.max(1, Math.min(width, height) / 2);
+    const innerR = Math.max(0.0001, outerR * ratio);
+    const cx = x + width / 2;
+    const cy = y + height / 2;
+    width = outerR * 2;
+    height = outerR * 2;
+    x = cx - width / 2;
+    y = cy - height / 2;
+    star = {
+      points: pointsCount,
+      innerRadius: innerR,
+      outerRadius: outerR,
+      smooth: !!(star && star.smooth),
+    };
+  }
+
   const baseProps: CanvasObject = {
     id: (data as any).id || generateId(),
     type: (data as any).type || 'rectangle',
@@ -170,6 +211,7 @@ export const fabricToCanvasObject = (fabricObj: fabric.Object): CanvasObject => 
     opacity: (fabricObj as any).opacity ?? 1,
     text: (fabricObj as any).text,
     triangle,
+    star,
     metadata: {
       createdAt: (data as any).createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),
