@@ -182,6 +182,12 @@ export const useCanvasKeyboardShortcuts = () => {
         setCanvasTool('select');
       }
 
+      if (event.code === 'KeyP') {
+        event.preventDefault();
+        setActiveTool('polygon');
+        setCanvasTool('select');
+      }
+
       if (event.code === 'KeyT') {
         event.preventDefault();
         setActiveTool('text');

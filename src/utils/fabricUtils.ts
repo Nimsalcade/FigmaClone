@@ -3,6 +3,7 @@ import { fabric } from 'fabric';
 import { CanvasObject } from '../store/editorStore';
 import { getTrianglePoints, resolveEquilateralSize } from './geometry/triangle';
 import { getStarPoints, ratioFromRadii } from './geometry/star';
+import { getRegularPolygonPoints } from './geometry/polygon';
 
 // Generate UUID using crypto API
 const generateId = (): string => {
@@ -120,6 +121,23 @@ export const createFabricObject = (obj: CanvasObject): fabric.Object => {
       break;
     }
 
+    case 'polygon': {
+      const sides = Math.max(3, Math.min(12, obj.polygon?.sides ?? 6));
+      const radius = obj.polygon?.radius ?? Math.min(width, height) / 2;
+      const rel = getRegularPolygonPoints({ sides, radius, rotation: -Math.PI / 2 });
+      fabricObj = new fabric.Polygon(rel as any, {
+        left: x,
+        top: y,
+        fill,
+        stroke,
+        strokeWidth,
+        opacity,
+        angle: rotation,
+        selectable: true,
+      });
+      break;
+    }
+
     default:
       fabricObj = new FabricClass({
         left: x,
@@ -143,6 +161,7 @@ export const createFabricObject = (obj: CanvasObject): fabric.Object => {
     createdBy: obj.metadata.createdBy,
     triangle: obj.triangle,
     star: obj.star,
+    polygon: (obj as any).polygon,
     });
 
     return fabricObj;
@@ -161,6 +180,7 @@ export const fabricToCanvasObject = (fabricObj: fabric.Object): CanvasObject => 
 
   let triangle = data.triangle as CanvasObject['triangle'] | undefined;
   let star = data.star as CanvasObject['star'] | undefined;
+  let polygon = (data as any).polygon as CanvasObject['polygon'] | undefined;
 
   if (data.type === 'triangle') {
     const mode = (triangle?.mode ?? 'isosceles') as 'equilateral' | 'isosceles' | 'scalene';
@@ -197,6 +217,18 @@ export const fabricToCanvasObject = (fabricObj: fabric.Object): CanvasObject => 
     };
   }
 
+  if (data.type === 'polygon') {
+    const sides = Math.max(3, Math.min(12, ((polygon?.sides ?? 6) as number) | 0));
+    const r = polygon?.radius ?? Math.min(width, height) / 2;
+    const cx = x + width / 2;
+    const cy = y + height / 2;
+    width = r * 2;
+    height = r * 2;
+    x = cx - width / 2;
+    y = cy - height / 2;
+    polygon = { sides, radius: r };
+  }
+
   const baseProps: CanvasObject = {
     id: (data as any).id || generateId(),
     type: (data as any).type || 'rectangle',
@@ -212,6 +244,7 @@ export const fabricToCanvasObject = (fabricObj: fabric.Object): CanvasObject => 
     text: (fabricObj as any).text,
     triangle,
     star,
+    polygon,
     metadata: {
       createdAt: (data as any).createdAt || new Date().toISOString(),
       updatedAt: new Date().toISOString(),

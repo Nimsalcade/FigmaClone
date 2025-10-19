@@ -14,9 +14,9 @@ const generateId = (): string => {
   });
 };
 
-export type ToolType = 'select' | 'hand' | 'rectangle' | 'ellipse' | 'line' | 'text' | 'triangle' | 'star';
+export type ToolType = 'select' | 'hand' | 'rectangle' | 'ellipse' | 'line' | 'text' | 'triangle' | 'star' | 'polygon';
 
-export type ShapeType = 'rectangle' | 'ellipse' | 'line' | 'text' | 'triangle' | 'star';
+export type ShapeType = 'rectangle' | 'ellipse' | 'line' | 'text' | 'triangle' | 'star' | 'polygon';
 
 export interface TriangleProps {
   mode: 'equilateral' | 'isosceles' | 'scalene';
@@ -29,6 +29,11 @@ export interface StarProps {
   innerRadius: number;
   outerRadius: number;
   smooth?: boolean;
+}
+
+export interface PolygonProps {
+  sides: number; // 3–12
+  radius: number;
 }
 
 export interface CanvasObject {
@@ -46,6 +51,7 @@ export interface CanvasObject {
   text?: string;
   triangle?: TriangleProps;
   star?: StarProps;
+  polygon?: PolygonProps;
   metadata: {
     createdAt: string;
     updatedAt: string;
@@ -106,7 +112,14 @@ interface EditorState {
     rotation?: number,
     smooth?: boolean,
   ) => string;
-}
+  createPolygon: (
+    x: number,
+    y: number,
+    radius: number,
+    sides: number,
+    rotation?: number,
+  ) => string;
+  }
 
 const useEditorStore = create<EditorState>((set, get) => ({
   // Initial state
@@ -362,6 +375,28 @@ const useEditorStore = create<EditorState>((set, get) => ({
         innerRadius: inner,
         outerRadius: outer,
         smooth,
+      },
+    });
+  },
+
+  createPolygon: (x, y, radius, sides, rotation = 0) => {
+    const r = Math.max(1, Math.round(radius));
+    const clampedSides = Math.max(3, Math.min(12, Math.floor(sides)));
+    const size = r * 2;
+    return get().addObject({
+      type: 'polygon',
+      x,
+      y,
+      width: size,
+      height: size,
+      rotation,
+      fill: '#38bdf8',
+      stroke: '#0284c7',
+      strokeWidth: 1,
+      opacity: 1,
+      polygon: {
+        sides: clampedSides,
+        radius: r,
       },
     });
   },
